@@ -5,9 +5,9 @@ description: Installs odoo-impact-graph for an Odoo project - the odoo-impact CL
 
 # Set up odoo-impact-graph
 
-Goal: the `odoo-impact` service running on http://127.0.0.1:8770/ with the project registered (one graph
-per git worktree, Generate button), an `odoo-impact mcp --auto` server for the agent, and the
-odoo-impact skills installed. Nothing here writes to a database.
+Goal: the `odoo-impact` service running on http://127.0.0.1:8770/ with the project registered (branches with a
+Generate button, interactive diagram), an `odoo-impact mcp --auto` server for the agent, and the odoo-impact
+skills installed. Nothing here writes to a database.
 
 Without the service (single folder, CI, no systemd): follow the "Single folder" variant of step 3.
 
@@ -16,7 +16,7 @@ Copy and track:
 ```
 - [ ] 1. CLI installed
 - [ ] 2. Folders known (odoo.conf addons_path or explicit folders)
-- [ ] 3. Service running, project registered, graph of the current worktree generated
+- [ ] 3. Service running, project registered, working copy (and the main branch) generated
 - [ ] 4. Graph kept out of git (single-folder variant only)
 - [ ] 5. MCP server registered for the agent
 - [ ] 6. Skills installed
@@ -55,12 +55,14 @@ Ask the user only when several configs match and nothing says which one is in us
 odoo-impact service status || odoo-impact service install   # systemd --user; else run `odoo-impact serve` in a terminal
 odoo-impact project add /path/to/custom-addons-repo --conf /path/to/odoo.conf --name <Project>
 # no odoo.conf: --core /path/to/odoo --core /path/to/enterprise
-odoo-impact project build /path/to/the/worktree/you/work/in
-odoo-impact project list                                    # every worktree with its graph state
+odoo-impact project build /path/to/custom-addons-repo                       # working copy
+odoo-impact project build /path/to/custom-addons-repo --ref origin/preprod   # a branch, read from git
+odoo-impact project list
 ```
 
-The repository is the git repo of the custom addons; every worktree of it appears in the dashboard.
-Folders of the conf inside the repository are swapped for the worktree being built; the others are core.
+The repository is the git repo of the custom addons; its branches appear in the dashboard and are built
+from git without a checkout. Folders of the conf inside the repository are swapped for the code being built;
+the others are core.
 
 Single folder variant (no service), from the project root, graph in `.odoo-impact/`:
 
@@ -131,7 +133,7 @@ each installed folder. Agents load skills at session start: restart the agent.
 
 ## Done when
 
-http://127.0.0.1:8770/ lists the project's worktrees with an "up to date" graph for the current one,
+http://127.0.0.1:8770/ lists the project with an "up to date" working copy and its Diagram opens,
 `odoo-impact field <custom model.field>` prints a tree and screens, `claude mcp get odoo-impact`
 (or the agent's equivalent) shows connected, and the install script printed `installed` for the four
 odoo-impact skills.

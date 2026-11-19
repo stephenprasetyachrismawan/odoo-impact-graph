@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Odoo Diagram</title>
+<style>
+:root {
+  --bg: #f4f3ef; --panel: #ffffff; --ink: #1c1c1a; --muted: #6a6963; --line: #d6d3cb; --soft: #f9f8f5;
+  --box: #ffffff; --box-head: #eeece6; --custom-head: #e2edf3; --accent: #1f6e93; --accent-ink: #ffffff;
+  --hit: #b86e00; --hit-soft: #fff1d6; --edge: #8b8a84; --state: #f3f7f1; --state-line: #5f7f55; --focus: #1c1c1a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1d1d1b; --ink: #ebeae4; --muted: #a3a29b; --line: #3a3935; --soft: #23231f;
+    --box: #20201d; --box-head: #2b2b27; --custom-head: #1f3440; --accent: #6db7d9; --accent-ink: #0d1a20;
+    --hit: #f0a93a; --hit-soft: #3b2c12; --edge: #8f8e86; --state: #1f271d; --state-line: #9cc28f; --focus: #ebeae4;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ebeae4; --muted: #a3a29b; --line: #3a3935; --soft: #23231f;
+  --box: #20201d; --box-head: #2b2b27; --custom-head: #1f3440; --accent: #6db7d9; --accent-ink: #0d1a20;
+  --hit: #f0a93a; --hit-soft: #3b2c12; --edge: #8f8e86; --state: #1f271d; --state-line: #9cc28f; --focus: #ebeae4;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+button, select, input { font: inherit; font-size: 13px; color: var(--ink); }
+button { border: 1px solid var(--line); background: var(--soft); border-radius: 5px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button.link { border: 0; background: none; padding: 0 2px; color: var(--accent); text-decoration: underline; }
+button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+select, input { border: 1px solid var(--line); background: var(--bg); border-radius: 5px; padding: 5px 7px; }
+.top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top a.home { color: var(--ink); font-weight: 600; text-decoration: none; margin-right: 4px; }
+.lens { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.lens button { border: 0; border-radius: 0; background: transparent; }
+.lens button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.spacer { flex: 1; }
+#dname { width: 190px; }
+.main { display: grid; grid-template-columns: 270px minmax(0, 1fr) 330px; min-height: 0; }
+.side { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; border: 0; border-radius: 0; background: none; padding: 8px 4px; border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--ink); font-weight: 600; }
+.filter { padding: 8px; border-bottom: 1px solid var(--line); }
+.filter input { width: 100%; }
+.tree { overflow: auto; flex: 1; padding: 4px 0 12px; }
+.tree details > summary { list-style: none; cursor: pointer; padding: 3px 10px; display: flex; gap: 6px; align-items: baseline; }
+.tree details > summary::-webkit-details-marker { display: none; }
+.tree details > summary::before { content: "›"; color: var(--muted); width: 8px; display: inline-block; transition: transform .1s; }
+.tree details[open] > summary::before { transform: rotate(90deg); }
+.tree .group-title { padding: 10px 10px 4px; color: var(--muted); font-size: 12px; }
+.tree .item { display: flex; gap: 6px; align-items: baseline; padding: 3px 10px 3px 26px; cursor: pointer; }
+.tree .item:hover, .tree summary:hover { background: var(--soft); }
+.tree .item.on-canvas { color: var(--accent); }
+.tree small { color: var(--muted); }
+.tree .depth1 { padding-left: 38px; } .tree .depth2 { padding-left: 50px; } .tree .depth3 { padding-left: 62px; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+.tag.c { color: var(--accent); border-color: var(--accent); }
+#stage { position: relative; overflow: hidden; background: var(--bg); cursor: grab; touch-action: none; }
+#stage.dragging { cursor: grabbing; }
+#svg { width: 100%; height: 100%; display: block; user-select: none; }
+.empty-canvas { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.empty-canvas div { max-width: 460px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; pointer-events: auto; }
+.empty-canvas b { color: var(--ink); }
+.zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+.detail { background: var(--panel); border-left: 1px solid var(--line); overflow: auto; padding: 12px 14px 24px; min-height: 0; }
+.detail h2 { font-size: 15px; margin: 0 0 2px; word-break: break-all; }
+.detail h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 16px 0 6px; }
+.detail .sub { color: var(--muted); font-size: 12px; word-break: break-all; }
+.detail .row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.detail .row span { word-break: break-all; }
+.detail .acts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+.detail pre { white-space: pre-wrap; word-break: break-word; font-size: 11.5px; background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: 8px; max-height: 340px; overflow: auto; }
+.detail .note { color: var(--muted); font-size: 12px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.modal.open { display: flex; }
+.modal > div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; width: min(560px, 100%); max-height: 80vh; overflow: auto; padding: 14px; }
+.modal h2 { margin: 0 0 10px; font-size: 15px; }
+.modal .row { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.status { color: var(--muted); font-size: 12px; }
+/* diagram */
+.n-box { fill: var(--box); stroke: var(--line); }
+.n-head { fill: var(--box-head); }
+.n-head.custom { fill: var(--custom-head); }
+.n-title { font-weight: 600; font-size: 13px; fill: var(--ink); }
+.n-sub, .n-meta { font-size: 11px; fill: var(--muted); }
+.n-row { font-size: 12px; fill: var(--ink); cursor: pointer; }
+.n-row.custom { font-weight: 600; }
+.n-row.hit { fill: var(--hit); font-weight: 700; }
+.n-rowbg.hit { fill: var(--hit-soft); }
+.n-sep { stroke: var(--line); }
+.n-more { font-size: 11px; fill: var(--accent); cursor: pointer; }
+.node { cursor: pointer; }
+.node.sel .n-box, .node.sel .uc, .node.sel .actor-hit { stroke: var(--ink); stroke-width: 2; }
+.node.hitnode .n-box { stroke: var(--hit); stroke-width: 2; }
+.node.missing .n-box { stroke-dasharray: 4 3; }
+.uc { fill: var(--box); stroke: var(--edge); }
+.uc-text { font-size: 12px; fill: var(--ink); }
+.actor-line { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+.actor-hit { fill: transparent; stroke: transparent; }
+.e { fill: none; stroke: var(--edge); stroke-width: 1.2; }
+.e.dash { stroke-dasharray: 5 4; }
+.e.hit { stroke: var(--hit); stroke-width: 2; }
+.e-label { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.e-label.hit { fill: var(--hit); }
+.st { fill: var(--state); stroke: var(--state-line); }
+.st-text { font-size: 12px; fill: var(--ink); }
+.st-any { fill: var(--soft); stroke: var(--line); stroke-dasharray: 3 3; }
+.tr { fill: none; stroke: var(--state-line); stroke-width: 1.3; }
+.tr.code { stroke-dasharray: 4 3; }
+.tr-label { font-size: 11px; fill: var(--ink); paint-order: stroke; stroke: var(--box); stroke-width: 3px; }
+.tr-group { font-size: 10px; fill: var(--muted); paint-order: stroke; stroke: var(--box); stroke-width: 3px; }
+@media (max-width: 1000px) {
+  .main { grid-template-columns: 230px minmax(0, 1fr); }
+  .detail { position: fixed; right: 0; top: 48px; bottom: 0; width: min(330px, 92vw); z-index: 10; box-shadow: -4px 0 16px rgba(0,0,0,.15); display: none; }
+  .detail.open { display: block; }
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="home" href="/" title="Back to the dashboard">Odoo Impact</a>
+  <span id="proj" class="status"></span>
+  <select id="build" aria-label="Branch / build"></select>
+  <div class="lens" role="group" aria-label="Lens">
+    <button data-lens="class" aria-pressed="true" title="Models, fields, methods, relations, inheritance">Class</button>
+    <button data-lens="usecase" aria-pressed="false" title="Security groups, menus and buttons, the models they work on">Use case</button>
+    <button data-lens="activity" aria-pressed="false" title="State workflows read from the code: buttons and methods that move a record">Activity</button>
+  </div>
+  <button id="layout" title="Arrange the diagram">Arrange</button>
+  <button id="fit" title="Fit the diagram to the screen">Fit</button>
+  <span class="spacer"></span>
+  <input id="dname" placeholder="Untitled diagram" aria-label="Diagram name">
+  <button id="save" class="primary">Save</button>
+  <button id="openD">Open…</button>
+  <button id="newD">New</button>
+  <button id="export" title="Download the diagram as SVG">SVG</button>
+</div>
+<div class="main">
+  <aside class="side">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="modules" aria-selected="true">Modules</button>
+      <button role="tab" data-tab="menus" aria-selected="false">Menus</button>
+      <button role="tab" data-tab="actors" aria-selected="false">Actors</button>
+    </div>
+    <div class="filter"><input id="filter" placeholder="Filter this list (optional)" aria-label="Filter the list"></div>
+    <div class="tree" id="tree"><p class="status" style="padding:10px">Loading the build…</p></div>
+  </aside>
+  <div id="stage">
+    <svg id="svg" aria-label="Diagram"><defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker>
+      <marker id="arrowHit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--hit)"/></marker>
+      <marker id="arrowSt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--state-line)"/></marker>
+      <marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="var(--box)" stroke="var(--edge)"/></marker>
+      <marker id="dia" viewBox="0 0 14 10" refX="1" refY="5" markerWidth="14" markerHeight="10" orient="auto"><path d="M1,5 L7,1 L13,5 L7,9 z" fill="var(--edge)"/></marker>
+    </defs><g id="vp"><g id="edges"></g><g id="nodes"></g></g></svg>
+    <div class="empty-canvas" id="empty"><div>
+      <p><b>Start from the left.</b> Click a model in <b>Modules</b>, a menu in <b>Menus</b> or a security group in <b>Actors</b> to put it on the canvas.</p>
+      <p>Then select it: the right panel adds what it is connected to (related models, parents, buttons, menus, actors), runs impact on a field, or shows its state workflow.</p>
+      <p><b>Class</b>, <b>Use case</b> and <b>Activity</b> redraw the same nodes as a class, use case or activity diagram. Drag to move, drag the background to pan, wheel to zoom.</p>
+    </div></div>
+    <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button></div>
+  </div>
+  <aside class="detail" id="detail"><p class="note">Select a node on the canvas.</p></aside>
+</div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div><h2 id="modalTitle"></h2><div id="modalBody"></div><p style="text-align:right;margin:12px 0 0"><button id="modalClose">Close</button></p></div></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const NS = 'http://www.w3.org/2000/svg';
+const params = new URLSearchParams(location.search);
+const PID = params.get('project');
+const api = async (path, body) => {
+  const res = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Odoo-Impact': '1'}, body: JSON.stringify(body)});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+};
+
+// ---------------- state ----------------
+const S = {
+  key: params.get('build') || 'wc', lens: 'class', C: null, meta: null, project: null,
+  nodes: new Map(),         // key -> {key, x, y, opts}
+  sel: null, view: {x: 40, y: 40, k: 1}, hits: null, slug: params.get('diagram') || null, tab: 'modules',
+};
+const sizes = new Map();
+const measure = (() => { const c = document.createElement('canvas').getContext('2d'); return (t, font = '12px system-ui') => { c.font = font; return c.measureText(t).width; }; })();
+
+// ---------------- catalog helpers ----------------
+const M = name => S.C.models[name];
+const menuById = () => S._menus || (S._menus = new Map(S.C.menus.map(m => [m.id, m])));
+const menuPath = id => { const parts = []; let m = menuById().get(id), g = 0; while (m && g++ < 8) { parts.unshift(m.name); m = menuById().get(m.parent); } return parts.join(' / '); };
+const menuGroups = id => { let m = menuById().get(id), g = 0; while (m && g++ < 8) { if (m.groups && m.groups.length) return m.groups; m = menuById().get(m.parent); } return []; };
+const groupName = g => (S.C.groups[g] || {}).name || g;
+const isRel = f => ['many2one', 'one2many', 'many2many'].includes(f.type) && f.comodel;
+const shortType = f => isRel(f) ? `${f.type === 'many2one' ? 'm2o' : f.type === 'one2many' ? 'o2m' : 'm2m'} ${f.comodel}` : f.type;
+
+// ---------------- node geometry per lens ----------------
+function classLines(key) {
+  const name = key.slice(6), m = M(name), node = S.nodes.get(key) || {opts: {}};
+  if (!m) return {fields: [], methods: [], more: 0};
+  const onCanvas = new Set([...S.nodes.keys()].filter(k => k.startsWith('model:')).map(k => k.slice(6)));
+  const hits = S.hits ? S.hits.fields : new Set();
+  let names = Object.keys(m.fields).filter(f => !['id', 'display_name', 'create_uid', 'create_date', 'write_uid', 'write_date', '__last_update'].includes(f));
+  const score = f => { const d = m.fields[f]; return (hits.has(name + '.' + f) ? 100 : 0) + (isRel(d) && onCanvas.has(d.comodel) ? 50 : 0) + (m.workflows.some(w => w.field === f) ? 40 : 0) + (d.custom ? 20 : 0) + (d.compute && d.stored ? 10 : 0) + (d.required ? 5 : 0); };
+  names.sort((a, b) => score(b) - score(a) || a.localeCompare(b));
+  const all = node.opts.all;
+  const shown = all ? names : names.filter(f => score(f) > 0).slice(0, 14);
+  const fields = shown.map(f => ({f, text: `${m.fields[f].compute ? '/' : ''}${f}: ${shortType(m.fields[f])}${m.fields[f].required ? ' [1]' : ''}`, custom: m.fields[f].custom, hit: hits.has(name + '.' + f)}));
+  const mnames = Object.keys(m.methods).filter(x => !x.startsWith('__'));
+  const btn = new Set(m.buttons.map(b => b.name));
+  const mscore = x => (S.hits && S.hits.methods.has(name + '::' + x) ? 100 : 0) + (btn.has(x) ? 30 : 0) + (['write', 'create', 'unlink', 'copy'].includes(x) ? 25 : 0) + (m.methods[x].custom ? 10 : 0);
+  mnames.sort((a, b) => mscore(b) - mscore(a) || a.localeCompare(b));
+  const mshown = all ? mnames : mnames.filter(x => mscore(x) > 0).slice(0, 8);
+  const methods = mshown.map(x => ({f: x, text: `${x.startsWith('_') ? '-' : '+'}${x}()`, custom: m.methods[x].custom, hit: S.hits && S.hits.methods.has(name + '::' + x)}));
+  return {fields, methods, more: names.length - shown.length + mnames.length - mshown.length};
+}
+
+function size(key) {
+  const [type] = key.split(':');
+  if (type === 'model') {
+    const m = M(key.slice(6));
+    if (S.lens === 'activity' && m && m.workflows.length) return activitySize(key);
+    if (S.lens === 'usecase') { const w = Math.max(150, measure(key.slice(6), '600 13px system-ui') + 28); return {w, h: 46}; }
+    const L = classLines(key);
+    const texts = [key.slice(6), ...L.fields.map(l => l.text), ...L.methods.map(l => l.text)];
+    const w = Math.min(380, Math.max(210, ...texts.map(t => measure(t) + 30), measure(key.slice(6), '600 13px system-ui') + 30));
+    const h = 44 + 8 + L.fields.length * 17 + 8 + L.methods.length * 17 + (L.more ? 18 : 0) + 8;
+    return {w, h};
+  }
+  if (type === 'actor') return {w: Math.max(90, measure(groupName(key.slice(6)), '11px system-ui') + 12), h: 78};
+  const label = ucLabel(key);
+  return {w: Math.max(130, Math.min(260, measure(label) + 40)), h: 44};
+}
+
+function ucLabel(key) {
+  if (key.startsWith('menu:')) { const m = menuById().get(key); return m ? m.name : key; }
+  if (key.startsWith('button:')) { const [, model, name] = key.split(':'); const b = (M(model) || {buttons: []}).buttons.find(x => x.name === name); return b ? b.label : name; }
+  return key;
+}
+
+// activity: states in columns by distance from the initial state
+function activityModel(key) {
+  const opts = (S.nodes.get(key) || {opts: {}}).opts;
+  const m = M(key.slice(6)), full = m.workflows[opts.wf || 0] || m.workflows[0];
+  // transitions done by code (not a button) are hidden unless asked: they crowd the chart
+  const w = opts.code ? full : {...full, transitions: full.transitions.filter(t => t.kind === 'button')};
+  w.hiddenCode = full.transitions.length - w.transitions.length;
+  const values = w.states.map(s => s[0]);
+  const dist = new Map([[w.initial, 0]]);
+  for (let i = 0; i < values.length; i++) for (const t of w.transitions) {
+    const from = t.from || [];
+    for (const f of from) if (dist.has(f) && !dist.has(t.to)) dist.set(t.to, dist.get(f) + 1);
+  }
+  let maxd = Math.max(0, ...dist.values());
+  for (const v of values) if (!dist.has(v)) dist.set(v, ++maxd);
+  const cols = new Map();
+  for (const v of values) { const d = dist.get(v); (cols.get(d) || cols.set(d, []).get(d)).push(v); }
+  const pos = new Map(); const label = Object.fromEntries(w.states);
+  const colW = 210, rowH = 74;
+  [...cols.keys()].sort((a, b) => a - b).forEach((d, ci) => cols.get(d).forEach((v, ri) => pos.set(v, {x: 40 + ci * colW, y: 64 + ri * rowH, w: Math.max(110, Math.min(170, measure(label[v] || v) + 24)), h: 34})));
+  const anyT = w.transitions.filter(t => !t.from || !t.from.length);
+  const rows = Math.max(...[...cols.values()].map(c => c.length));
+  const width = 40 + cols.size * colW + 20;
+  const height = 64 + rows * rowH + (anyT.length ? 70 : 10);
+  return {w, pos, label, width, height, anyY: 64 + rows * rowH + 20};
+}
+function activitySize(key) { const a = activityModel(key); return {w: Math.max(320, a.width), h: a.height}; }
+
+// ---------------- rendering ----------------
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function text(parent, x, y, str, cls, extra = {}) { const t = el('text', {x, y, class: cls, ...extra}, parent); t.textContent = str; return t; }
+
+function render() {
+  const g = $('#nodes'); g.innerHTML = '';
+  sizes.clear();
+  $('#empty').style.display = S.nodes.size ? 'none' : 'flex';
+  for (const [key, n] of S.nodes) {
+    const sz = size(key); sizes.set(key, sz);
+    const ng = el('g', {class: 'node' + (S.sel === key ? ' sel' : '') + (S.hits && S.hits.nodes.has(key) ? ' hitnode' : '') + (exists(key) ? '' : ' missing'), transform: `translate(${n.x},${n.y})`, 'data-key': key, tabindex: 0}, g);
+    const [type] = key.split(':');
+    if (!exists(key)) { el('rect', {class: 'n-box', width: sz.w, height: 44, rx: 4}, ng); text(ng, 10, 18, key, 'n-title'); text(ng, 10, 34, 'not in this build', 'n-sub'); continue; }
+    if (type === 'model') drawModel(ng, key, sz);
+    else if (type === 'actor') drawActor(ng, key, sz);
+    else drawUseCase(ng, key, sz);
+  }
+  drawEdges();
+  markTree();
+}
+function exists(key) {
+  const [type] = key.split(':');
+  if (type === 'model') return !!M(key.slice(6));
+  if (type === 'menu') return menuById().has(key);
+  if (type === 'actor') return key === 'actor:__system' || !!S.C.groups[key.slice(6)] || true;
+  if (type === 'button') { const [, model, name] = key.split(':'); return !!(M(model) && M(model).buttons.some(b => b.name === name)); }
+  return true;
+}
+
+function drawModel(g, key, sz) {
+  const name = key.slice(6), m = M(name);
+  if (S.lens === 'activity' && m.workflows.length) return drawActivity(g, key, sz);
+  el('rect', {class: 'n-box', width: sz.w, height: sz.h, rx: 4}, g);
+  const stereo = m.kind === 'transient' ? '«wizard»' : m.kind === 'abstract' ? '«abstract»' : '';
+  el('path', {class: 'n-head' + (m.custom ? ' custom' : ''), d: `M0,4 a4,4 0 0 1 4,-4 h${sz.w - 8} a4,4 0 0 1 4,4 v${S.lens === 'usecase' ? 42 : 40} h-${sz.w} z`}, g);
+  text(g, 10, 18, name, 'n-title');
+  text(g, 10, 34, [stereo, m.description !== name ? m.description : '', m.own ? 'custom' : m.custom ? 'extended' : ''].filter(Boolean).join('  ').slice(0, 60), 'n-sub');
+  if (S.lens === 'usecase') return;
+  const L = classLines(key);
+  let y = 52;
+  el('line', {class: 'n-sep', x1: 0, x2: sz.w, y1: 44, y2: 44}, g);
+  for (const l of L.fields) {
+    if (l.hit) el('rect', {class: 'n-rowbg hit', x: 1, y: y - 1, width: sz.w - 2, height: 17}, g);
+    text(g, 10, y + 12, l.text, 'n-row' + (l.custom ? ' custom' : '') + (l.hit ? ' hit' : ''), {'data-field': l.f});
+    y += 17;
+  }
+  y += 4; el('line', {class: 'n-sep', x1: 0, x2: sz.w, y1: y, y2: y}, g); y += 4;
+  for (const l of L.methods) {
+    if (l.hit) el('rect', {class: 'n-rowbg hit', x: 1, y: y - 1, width: sz.w - 2, height: 17}, g);
+    text(g, 10, y + 12, l.text, 'n-row' + (l.custom ? ' custom' : '') + (l.hit ? ' hit' : ''), {'data-method': l.f});
+    y += 17;
+  }
+  if (L.more || S.nodes.get(key).opts.all) text(g, 10, y + 14, S.nodes.get(key).opts.all ? 'show key members only' : `+ ${L.more} more members`, 'n-more', {'data-toggle': '1'});
+}
+
+function drawActivity(g, key, sz) {
+  const name = key.slice(6), a = activityModel(key);
+  el('rect', {class: 'n-box', width: sz.w, height: sz.h, rx: 4}, g);
+  el('path', {class: 'n-head' + (M(name).custom ? ' custom' : ''), d: `M0,4 a4,4 0 0 1 4,-4 h${sz.w - 8} a4,4 0 0 1 4,4 v36 h-${sz.w} z`}, g);
+  text(g, 10, 17, `${name} · ${a.w.label} (${a.w.field})`, 'n-title');
+  text(g, 10, 33, [M(name).workflows.length > 1 ? `${M(name).workflows.length} workflows, select to switch` : '', a.w.computed_by ? `also computed by ${a.w.computed_by}()` : '', a.w.hiddenCode ? `${a.w.hiddenCode} transitions by code hidden` : ''].filter(Boolean).join(' · '), 'n-sub');
+  const anyBox = {x: 40, y: a.anyY, w: 120, h: 30};
+  const anyT = a.w.transitions.filter(t => !t.from || !t.from.length);
+  // initial marker
+  const ini = a.pos.get(a.w.initial);
+  if (ini) { el('circle', {cx: ini.x - 22, cy: ini.y + ini.h / 2, r: 6, fill: 'var(--ink)'}, g); el('path', {class: 'tr', d: `M${ini.x - 16},${ini.y + ini.h / 2} L${ini.x - 2},${ini.y + ini.h / 2}`, 'marker-end': 'url(#arrowSt)'}, g); }
+  const pairCount = new Map();
+  const drawT = (p1, p2, t) => {
+    const k = [p1.x, p1.y, p2.x, p2.y].join(',');
+    const n = pairCount.get(k) || 0; pairCount.set(k, n + 1);
+    let d, lx, ly;
+    if (p1 === p2) { d = `M${p1.x + p1.w - 20},${p1.y} c0,-26 30,-26 22,0`; lx = p1.x + p1.w; ly = p1.y - 22 - n * 12; }
+    else {
+      const x1 = p1.x + p1.w / 2, y1 = p1.y + p1.h / 2, x2 = p2.x + p2.w / 2, y2 = p2.y + p2.h / 2;
+      const [sx, sy] = clip(p1, x2, y1 === y2 ? y2 : y2), [tx, ty] = clip(p2, x1, y1);
+      const bend = (n + 1) * 16 * (x2 >= x1 ? -1 : 1);
+      const mx = (sx + tx) / 2 + (ty - sy === 0 ? 0 : bend / 3), my = (sy + ty) / 2 + bend;
+      d = `M${sx},${sy} Q${mx},${my} ${tx},${ty}`; lx = mx; ly = my;
+    }
+    el('path', {class: 'tr' + (t.kind !== 'button' ? ' code' : ''), d, 'marker-end': 'url(#arrowSt)'}, g);
+    const lab = (t.kind === 'button' ? t.label : (t.kind === 'cron' ? 'cron: ' : 'code: ') + t.label);
+    text(g, lx, ly - 2, lab.length > 30 ? lab.slice(0, 29) + '…' : lab, 'tr-label', {'text-anchor': 'middle'}).appendChild(Object.assign(document.createElementNS(NS, 'title'), {textContent: `${lab}\nmethod ${t.method}, writes in ${t.writer}()`}));
+    if (t.groups && t.groups.length) text(g, lx, ly + 10, t.groups.map(groupName).join(', ').slice(0, 40), 'tr-group', {'text-anchor': 'middle'});
+  };
+  for (const t of a.w.transitions) {
+    const to = a.pos.get(t.to); if (!to) continue;
+    if (t.from && t.from.length) for (const f of t.from) { const from = a.pos.get(f); if (from) drawT(from, to, t); }
+  }
+  if (anyT.length) {
+    el('rect', {class: 'st-any', x: anyBox.x, y: anyBox.y, width: anyBox.w, height: anyBox.h, rx: 15}, g);
+    text(g, anyBox.x + anyBox.w / 2, anyBox.y + 19, 'any state', 'st-text', {'text-anchor': 'middle'});
+    for (const t of anyT) { const to = a.pos.get(t.to); if (to) drawT(anyBox, to, t); }
+  }
+  for (const [v, p] of a.pos) {
+    el('rect', {class: 'st', x: p.x, y: p.y, width: p.w, height: p.h, rx: 17}, g);
+    text(g, p.x + p.w / 2, p.y + 21, a.label[v] || v, 'st-text', {'text-anchor': 'middle'}).appendChild(Object.assign(document.createElementNS(NS, 'title'), {textContent: v}));
+  }
+}
+
+function drawUseCase(g, key, sz) {
+  el('ellipse', {class: 'uc', cx: sz.w / 2, cy: sz.h / 2, rx: sz.w / 2, ry: sz.h / 2}, g);
+  const label = ucLabel(key);
+  text(g, sz.w / 2, sz.h / 2 + 4, label.length > 34 ? label.slice(0, 33) + '…' : label, 'uc-text', {'text-anchor': 'middle'});
+  const tip = key.startsWith('menu:') ? menuPath(key) : key.split(':').slice(1).join('.') + '()';
+  g.appendChild(Object.assign(document.createElementNS(NS, 'title'), {textContent: tip}));
+}
+
+function drawActor(g, key, sz) {
+  const cx = sz.w / 2;
+  el('rect', {class: 'actor-hit', width: sz.w, height: sz.h}, g);
+  el('circle', {class: 'actor-line', cx, cy: 9, r: 8}, g);
+  el('path', {class: 'actor-line', d: `M${cx},17 v22 M${cx - 13},25 h26 M${cx},39 l-11,15 M${cx},39 l11,15`}, g);
+  const name = key === 'actor:__system' ? 'System (cron)' : groupName(key.slice(6));
+  text(g, cx, 70, name.length > 34 ? name.slice(0, 33) + '…' : name, 'n-meta', {'text-anchor': 'middle'});
+}
+
+// ---------------- edges ----------------
+function clip(b, tx, ty) {
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2, dx = tx - cx, dy = ty - cy;
+  if (!dx && !dy) return [cx, cy];
+  const s = Math.min(Math.abs((b.w / 2) / (dx || 1e-9)), Math.abs((b.h / 2) / (dy || 1e-9)));
+  return [cx + dx * s, cy + dy * s];
+}
+function boxOf(key) { const n = S.nodes.get(key), s = sizes.get(key); return {x: n.x, y: n.y, w: s.w, h: s.h}; }
+
+function computeEdges() {
+  const keys = [...S.nodes.keys()], has = k => S.nodes.has(k), out = [];
+  const models = keys.filter(k => k.startsWith('model:') && M(k.slice(6)));
+  if (S.lens === 'class' || S.lens === 'activity') {
+    const done = new Set();
+    for (const k of models) {
+      const name = k.slice(6), m = M(name);
+      for (const [f, d] of Object.entries(m.fields)) {
+        if (!isRel(d) || !has('model:' + d.comodel) || d.comodel === name && d.type !== 'many2one') continue;
+        const other = M(d.comodel);
+        if (d.type === 'one2many') {
+          const inv = d.inverse_name; const pair = [name, d.comodel, inv].join('|');
+          if (done.has(pair)) continue; done.add([d.comodel, name, inv].join('|'));
+          out.push({a: k, b: 'model:' + d.comodel, label: `${f}  1 ─ *  ${inv || ''}`, kind: 'assoc', key: `${name}.${f}`});
+          continue;
+        }
+        if (d.type === 'many2one') {
+          const back = Object.entries(other.fields).find(([, x]) => x.type === 'one2many' && x.comodel === name && x.inverse_name === f);
+          if (back) { done.add([name, d.comodel, f].join('|')); if (done.has([d.comodel, name, f].join('|'))) continue; done.add([d.comodel, name, f].join('|')); out.push({a: 'model:' + d.comodel, b: k, label: `${back[0]}  1 ─ *  ${f}`, kind: 'assoc', key: `${name}.${f}`}); continue; }
+          out.push({a: k, b: 'model:' + d.comodel, label: `${f}  * ─ 1`, kind: 'assoc', key: `${name}.${f}`, arrow: true});
+        } else out.push({a: k, b: 'model:' + d.comodel, label: `${f}  * ─ *`, kind: 'assoc', key: `${name}.${f}`});
+      }
+      for (const p of m.parents) if (has('model:' + p)) out.push({a: k, b: 'model:' + p, label: '', kind: 'inherit'});
+      for (const [co, fk] of Object.entries(m.inherits || {})) if (has('model:' + co)) out.push({a: k, b: 'model:' + co, label: `_inherits ${fk}`, kind: 'compose'});
+    }
+  }
+  // use case links are drawn in every lens when both ends are on the canvas
+  for (const k of keys) {
+    if (k.startsWith('menu:')) {
+      const menu = menuById().get(k); if (!menu) continue;
+      if (menu.model && has('model:' + menu.model)) out.push({a: k, b: 'model:' + menu.model, label: 'opens', kind: 'dep'});
+      for (const gname of menuGroups(k)) if (has('actor:' + gname)) out.push({a: 'actor:' + gname, b: k, label: '', kind: 'actor'});
+    }
+    if (k.startsWith('button:')) {
+      const [, model, name] = k.split(':'), b = (M(model) || {buttons: []}).buttons.find(x => x.name === name);
+      if (has('model:' + model)) out.push({a: k, b: 'model:' + model, label: name.includes('.') ? 'opens' : name + '()', kind: 'dep'});
+      for (const gname of (b && b.groups) || []) if (has('actor:' + gname)) out.push({a: 'actor:' + gname, b: k, label: '', kind: 'actor'});
+    }
+  }
+  if (has('actor:__system')) for (const k of models) for (const w of M(k.slice(6)).workflows) if (w.transitions.some(t => t.kind === 'cron')) out.push({a: 'actor:__system', b: k, label: 'cron', kind: 'actor'});
+  // impact edges between fields of models on the canvas
+  if (S.hits) for (const e of S.hits.edges) {
+    const a = 'model:' + (e.sm || ''), b = 'model:' + (e.tm || '');
+    if (e.sm && e.tm && has(a) && has(b) && a !== b) out.push({a, b, label: e.label, kind: 'hit'});
+  }
+  return out;
+}
+
+function drawEdges() {
+  const g = $('#edges'); g.innerHTML = '';
+  const pairs = new Map();
+  for (const e of computeEdges()) {
+    if (!sizes.has(e.a) || !sizes.has(e.b)) continue;
+    const A = boxOf(e.a), B = boxOf(e.b);
+    const pk = [e.a, e.b].sort().join('|'); const n = pairs.get(pk) || 0; pairs.set(pk, n + 1);
+    const [x1, y1] = clip(A, B.x + B.w / 2, B.y + B.h / 2), [x2, y2] = clip(B, A.x + A.w / 2, A.y + A.h / 2);
+    const off = n * 18, mx = (x1 + x2) / 2 + (y2 - y1 ? off : 0), my = (y1 + y2) / 2 + (x2 - x1 ? off : 0);
+    const attrs = {class: 'e' + (e.kind === 'dep' || e.kind === 'hit' ? ' dash' : '') + (e.kind === 'hit' ? ' hit' : ''), d: n ? `M${x1},${y1} Q${mx},${my} ${x2},${y2}` : `M${x1},${y1} L${x2},${y2}`};
+    if (e.kind === 'inherit') attrs['marker-end'] = 'url(#tri)';
+    else if (e.kind === 'compose') attrs['marker-start'] = 'url(#dia)';
+    else if (e.kind === 'dep' || e.arrow) attrs['marker-end'] = 'url(#arrow)';
+    else if (e.kind === 'hit') attrs['marker-end'] = 'url(#arrowHit)';
+    el('path', attrs, g);
+    if (e.label) text(g, mx, my - 4, e.label, 'e-label' + (e.kind === 'hit' ? ' hit' : ''), {'text-anchor': 'middle'});
+  }
+}
+
+// ---------------- view: pan / zoom / drag ----------------
+function applyView() { $('#vp').setAttribute('transform', `translate(${S.view.x},${S.view.y}) scale(${S.view.k})`); }
+function toWorld(cx, cy) { const r = $('#svg').getBoundingClientRect(); return [(cx - r.left - S.view.x) / S.view.k, (cy - r.top - S.view.y) / S.view.k]; }
+let drag = null;
+$('#svg').addEventListener('pointerdown', ev => {
+  const ng = ev.target.closest('.node');
+  if (ng) {
+    const key = ng.dataset.key, n = S.nodes.get(key), [wx, wy] = toWorld(ev.clientX, ev.clientY);
+    drag = {key, dx: wx - n.x, dy: wy - n.y, moved: false, target: ev.target};
+  } else { drag = {pan: true, sx: ev.clientX, sy: ev.clientY, vx: S.view.x, vy: S.view.y, moved: false}; $('#stage').classList.add('dragging'); }
+  $('#svg').setPointerCapture(ev.pointerId);
+});
+$('#svg').addEventListener('pointermove', ev => {
+  if (!drag) return;
+  if (drag.pan) { S.view.x = drag.vx + ev.clientX - drag.sx; S.view.y = drag.vy + ev.clientY - drag.sy; drag.moved = true; applyView(); return; }
+  const [wx, wy] = toWorld(ev.clientX, ev.clientY), n = S.nodes.get(drag.key);
+  if (Math.abs(wx - drag.dx - n.x) + Math.abs(wy - drag.dy - n.y) > 2) drag.moved = true;
+  n.x = Math.round(wx - drag.dx); n.y = Math.round(wy - drag.dy);
+  const ng = document.querySelector(`.node[data-key="${CSS.escape(drag.key)}"]`);
+  if (ng) ng.setAttribute('transform', `translate(${n.x},${n.y})`);
+  drawEdges();
+});
+$('#svg').addEventListener('pointerup', ev => {
+  const d = drag; drag = null; $('#stage').classList.remove('dragging');
+  if (!d) return;
+  if (d.pan) { if (!d.moved) select(null); return; }
+  if (!d.moved) {
+    const t = d.target;
+    if (t.dataset && t.dataset.toggle) { const n = S.nodes.get(d.key); n.opts.all = !n.opts.all; render(); }
+    else if (t.dataset && t.dataset.field) { select(d.key); runQuery('impact', d.key.slice(6) + '.' + t.dataset.field); }
+    else if (t.dataset && t.dataset.method) { select(d.key); showMethod(d.key.slice(6), t.dataset.method); }
+    else select(d.key);
+  }
+});
+$('#svg').addEventListener('wheel', ev => {
+  ev.preventDefault();
+  const r = $('#svg').getBoundingClientRect(), cx = ev.clientX - r.left, cy = ev.clientY - r.top;
+  const k = Math.min(2.5, Math.max(0.15, S.view.k * (ev.deltaY < 0 ? 1.12 : 1 / 1.12)));
+  S.view.x = cx - (cx - S.view.x) * k / S.view.k; S.view.y = cy - (cy - S.view.y) * k / S.view.k; S.view.k = k; applyView();
+}, {passive: false});
+$('#zin').onclick = () => { S.view.k = Math.min(2.5, S.view.k * 1.2); applyView(); };
+$('#zout').onclick = () => { S.view.k = Math.max(0.15, S.view.k / 1.2); applyView(); };
+$('#svg').addEventListener('keydown', ev => {
+  const ng = ev.target.closest && ev.target.closest('.node');
+  if (!ng) return;
+  if (ev.key === 'Enter') select(ng.dataset.key);
+  if (ev.key === 'Delete' || ev.key === 'Backspace') removeNode(ng.dataset.key);
+});
+
+function fit() {
+  if (!S.nodes.size) return;
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const k of S.nodes.keys()) { const b = boxOf(k); x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.w); y2 = Math.max(y2, b.y + b.h); }
+  const r = $('#svg').getBoundingClientRect();
+  const k = Math.min(1.4, Math.max(0.15, Math.min((r.width - 60) / (x2 - x1), (r.height - 60) / (y2 - y1))));
+  S.view = {k, x: (r.width - (x2 - x1) * k) / 2 - x1 * k, y: (r.height - (y2 - y1) * k) / 2 - y1 * k};
+  applyView();
+}
+$('#fit').onclick = fit;
+
+// ---------------- placing nodes ----------------
+function overlaps(x, y, w, h, skip) {
+  for (const k of S.nodes.keys()) { if (k === skip || !sizes.has(k)) continue; const b = boxOf(k); if (x < b.x + b.w + 30 && x + w + 30 > b.x && y < b.y + b.h + 30 && y + h + 30 > b.y) return true; }
+  return false;
+}
+function freeSpot(key, near) {
+  const s = size(key);
+  let cx, cy;
+  if (near && S.nodes.has(near)) { const b = boxOf(near); cx = b.x + b.w + 60; cy = b.y; }
+  else { const r = $('#svg').getBoundingClientRect(); [cx, cy] = toWorld(r.left + r.width / 2 - s.w / 2, r.top + 80); }
+  for (let i = 0; i < 400; i++) {
+    const ring = Math.floor(i / 8), a = (i % 8) / 8 * Math.PI * 2;
+    const x = Math.round(cx + Math.cos(a) * ring * 140 * (i ? 1 : 0)), y = Math.round(cy + Math.sin(a) * ring * 110 * (i ? 1 : 0));
+    if (!overlaps(x, y, s.w, s.h, key)) return [x, y];
+  }
+  return [cx, cy];
+}
+function addNode(key, near, opts = {}) {
+  if (S.nodes.has(key)) return false;
+  for (const k of S.nodes.keys()) if (!sizes.has(k)) sizes.set(k, size(k));
+  const [x, y] = freeSpot(key, near);
+  S.nodes.set(key, {key, x, y, opts});
+  sizes.set(key, size(key));
+  return true;
+}
+function addMany(keys, near) { let n = 0; for (const k of keys) if (addNode(k, near)) n++; render(); return n; }
+function removeNode(key) { S.nodes.delete(key); if (S.sel === key) select(null); render(); }
+
+function classAdjacency(models) {
+  const set = new Set(models), adj = new Map(models.map(k => [k, new Set()]));
+  for (const k of models) {
+    const m = M(k.slice(6)); if (!m) continue;
+    for (const d of Object.values(m.fields)) if (isRel(d) && set.has('model:' + d.comodel) && 'model:' + d.comodel !== k) { adj.get(k).add('model:' + d.comodel); adj.get('model:' + d.comodel).add(k); }
+    for (const p of m.parents) if (set.has('model:' + p)) { adj.get(k).add('model:' + p); adj.get('model:' + p).add(k); }
+  }
+  return adj;
+}
+function arrange() {
+  // rows: actors, use cases, then models by distance from the most connected model; long rows wrap
+  const keys = [...S.nodes.keys()];
+  for (const k of keys) sizes.set(k, size(k));
+  const models = keys.filter(k => k.startsWith('model:'));
+  const adj = classAdjacency(models);
+  const layer = new Map();
+  for (const k of keys) layer.set(k, k.startsWith('actor:') ? 0 : (k.startsWith('menu:') || k.startsWith('button:')) ? 1 : 2);
+  const seen = new Set();
+  const order = [...models].sort((a, b) => adj.get(b).size - adj.get(a).size);
+  for (const start of order) {
+    if (seen.has(start)) continue;
+    const q = [[start, 0]]; seen.add(start);
+    while (q.length) { const [k, d] = q.shift(); layer.set(k, 2 + Math.min(d, 3)); for (const o of adj.get(k)) if (!seen.has(o)) { seen.add(o); q.push([o, d + 1]); } }
+  }
+  const area = keys.reduce((a, k) => a + (sizes.get(k).w + 70) * (sizes.get(k).h + 70), 0);
+  const maxW = Math.max(1200, Math.sqrt(area) * 1.6);
+  const rows = new Map();
+  for (const k of keys) { const l = layer.get(k); (rows.get(l) || rows.set(l, []).get(l)).push(k); }
+  const placedX = new Map();
+  let y = 0;
+  for (const l of [...rows.keys()].sort((a, b) => a - b)) {
+    // order by the mean x of already placed neighbours (keeps related boxes above each other)
+    const items = rows.get(l).sort((a, b) => {
+      const bx = k => { const ns = [...(adj.get(k) || [])].filter(n => placedX.has(n)); return ns.length ? ns.reduce((s, n) => s + placedX.get(n), 0) / ns.length : 0; };
+      return bx(a) - bx(b);
+    });
+    let x = 0, h = 0, line = [];
+    const flush = () => { const shift = -x / 2; for (const k of line) { S.nodes.get(k).x += Math.round(shift); placedX.set(k, S.nodes.get(k).x); } y += h + 80; x = 0; h = 0; line = []; };
+    for (const k of items) {
+      const s = sizes.get(k);
+      if (x > 0 && x + s.w > maxW) flush();
+      S.nodes.get(k).x = x; S.nodes.get(k).y = y; line.push(k); x += s.w + 60; h = Math.max(h, s.h);
+    }
+    if (line.length) flush();
+  }
+  render(); fit();
+}
+$('#layout').onclick = arrange;
+
+// ---------------- selection & detail panel ----------------
+function select(key) {
+  S.sel = key;
+  for (const ng of document.querySelectorAll('.node')) ng.classList.toggle('sel', ng.dataset.key === key);
+  $('#detail').classList.toggle('open', !!key);
+  if (!key) { $('#detail').innerHTML = '<p class="note">Select a node on the canvas.</p>'; return; }
+  const [type] = key.split(':');
+  if (!exists(key)) { $('#detail').innerHTML = `<h2>${esc(key)}</h2><p class="note">Not in this build (renamed, removed, or module not scanned).</p><div class="acts"><button data-rm="${esc(key)}">Remove from diagram</button></div>`; return; }
+  ({model: detailModel, menu: detailMenu, button: detailButton, actor: detailActor})[type](key);
+}
+
+const addBtn = (key, label, near) => S.nodes.has(key) ? `<span class="note">on canvas</span>` : `<button class="link" data-add="${esc(key)}" data-near="${esc(near || '')}" aria-label="Add ${esc(label)}">add</button>`;
+
+function detailModel(key) {
+  const name = key.slice(6), m = M(name), node = S.nodes.get(key);
+  const rel = Object.entries(m.fields).filter(([, f]) => isRel(f) && M(f.comodel));
+  const relRows = rel.sort((a, b) => (M(b[1].comodel).own - M(a[1].comodel).own) || a[0].localeCompare(b[0]))
+    .map(([f, d]) => `<div class="row"><span>${esc(f)} <small>${esc(d.type)} → ${esc(d.comodel)}</small></span>${addBtn('model:' + d.comodel, d.comodel, key)}</div>`).join('');
+  const parents = m.parents.filter(p => M(p)).map(p => `<div class="row"><span>${esc(p)}</span>${addBtn('model:' + p, p, key)}</div>`).join('');
+  const buttons = m.buttons.map(b => `<div class="row"><span>${esc(b.label)} <small>${esc(b.name)}${b.groups.length ? ' · ' + esc(b.groups.map(groupName).join(', ')) : ''}</small></span>${addBtn(`button:${name}:${b.name}`, b.label, key)}</div>`).join('');
+  const menus = S.C.menus.filter(x => x.model === name).map(x => `<div class="row"><span>${esc(menuPath(x.id))}</span>${addBtn(x.id, x.name, key)}</div>`).join('');
+  const access = m.access.map(a => `<div class="row"><span>${esc(a.group ? groupName(a.group) : 'everyone')}</span><small>${esc(a.perms.toUpperCase() || '—')}</small></div>`).join('');
+  const wf = m.workflows.map((w, i) => `<div class="row"><span>${esc(w.label)} <small>${esc(w.field)} · ${w.states.length} states · ${w.transitions.filter(t => t.kind === 'button').length} by buttons, ${w.transitions.filter(t => t.kind !== 'button').length} by code</small></span><button class="link" data-wf="${i}">show</button></div>`).join('')
+    + (m.workflows.length ? `<label class="note" style="display:flex;gap:6px;margin-top:6px"><input type="checkbox" data-code="${esc(key)}" ${node.opts.code ? 'checked' : ''}> also show transitions done by code and crons</label>` : '');
+  const relCustom = [...new Set(rel.filter(([, d]) => M(d.comodel).own && d.comodel !== name).map(([, d]) => 'model:' + d.comodel))];
+  $('#detail').innerHTML = `
+    <h2>${esc(name)}</h2>
+    <div class="sub">${esc(m.description)} · ${esc(m.kind)}${m.own ? ' · created by ' + esc(m.defined_in.join(', ')) : m.custom ? ' · extended by custom modules' : ''}<br>modules: ${esc(m.modules.join(', '))}</div>
+    <div class="acts">
+      ${relCustom.length ? `<button data-addall="${esc(relCustom.join(','))}" data-near="${esc(key)}">Add models created by custom modules (${relCustom.length})</button>` : ''}
+      <button data-toggleall="${esc(key)}">${node.opts.all ? 'Key members' : 'All members'}</button>
+      <button data-rm="${esc(key)}">Remove</button>
+    </div>
+    <p class="note">Click a field in the box: impact of changing it. Click a method: who calls it and what it writes.</p>
+    ${wf ? `<h3>Workflows (Activity lens)</h3>${wf}` : ''}
+    <h3>Relations (${rel.length})</h3>${relRows || '<p class="note">None.</p>'}
+    ${parents ? `<h3>Inherits from</h3>${parents}` : ''}
+    <h3>Buttons / use cases (${m.buttons.length})</h3>${buttons || '<p class="note">No button in its views.</p>'}
+    <h3>Menus opening it</h3>${menus || '<p class="note">No menu.</p>'}
+    <h3>Access rights</h3>${access || '<p class="note">No ir.model.access row read.</p>'}
+    <div id="q"></div>`;
+}
+
+function detailMenu(key) {
+  const m = menuById().get(key);
+  const groups = menuGroups(key);
+  $('#detail').innerHTML = `
+    <h2>${esc(m.name)}</h2><div class="sub">${esc(menuPath(key))}<br>${esc(m.action || 'no action')}</div>
+    <div class="acts">${m.model ? `<button data-add="model:${esc(m.model)}" data-near="${esc(key)}">Add model ${esc(m.model)}</button>` : ''}
+      ${groups.length ? `<button data-addall="${esc(groups.map(g => 'actor:' + g).join(','))}" data-near="${esc(key)}">Add actors (${groups.length})</button>` : ''}
+      ${m.action ? `<button data-q="reach" data-ref="${esc(m.action)}">What it can change</button>` : ''}
+      <button data-rm="${esc(key)}">Remove</button></div>
+    <h3>Visible for</h3>${groups.map(g => `<div class="row"><span>${esc(groupName(g))}</span>${addBtn('actor:' + g, g, key)}</div>`).join('') || '<p class="note">Every user who sees the parent menu (no group on the menu).</p>'}
+    <div id="q"></div>`;
+}
+
+function detailButton(key) {
+  const [, model, name] = key.split(':'), b = M(model).buttons.find(x => x.name === name);
+  const isAction = name.includes('.');
+  $('#detail').innerHTML = `
+    <h2>${esc(b.label)}</h2><div class="sub">${isAction ? 'opens ' + esc(name) : esc(model) + '.' + esc(name) + '()'}<br>in ${b.views.length} view(s)</div>
+    <div class="acts"><button data-add="model:${esc(model)}" data-near="${esc(key)}">Add model</button>
+      ${b.groups.length ? `<button data-addall="${esc(b.groups.map(g => 'actor:' + g).join(','))}" data-near="${esc(key)}">Add actors</button>` : ''}
+      <button data-q="reach" data-ref="${esc(isAction ? 'action:' + name : model + '::' + name)}">What it can change</button>
+      <button data-rm="${esc(key)}">Remove</button></div>
+    <h3>Visible for</h3>${b.groups.map(g => `<div class="row"><span>${esc(groupName(g))}</span>${addBtn('actor:' + g, g, key)}</div>`).join('') || '<p class="note">No group on the button: everyone who can open the view.</p>'}
+    <div id="q"></div>`;
+}
+
+function detailActor(key) {
+  const g = key.slice(6);
+  if (g === '__system') { $('#detail').innerHTML = `<h2>System (cron)</h2><p class="note">Transitions done by scheduled actions.</p><div class="acts"><button data-rm="${esc(key)}">Remove</button></div>`; return; }
+  const menus = S.C.menus.filter(m => m.action && menuGroups(m.id).includes(g)).sort((a, b) => b.custom - a.custom);
+  const buttons = [];
+  for (const [mn, m] of Object.entries(S.C.models)) for (const b of m.buttons) if (b.groups.includes(g)) buttons.push([mn, b]);
+  const access = Object.entries(S.C.models).filter(([, m]) => m.access.some(a => a.group === g)).map(([mn, m]) => [mn, m.access.find(a => a.group === g).perms]);
+  $('#detail').innerHTML = `
+    <h2>${esc(groupName(g))}</h2><div class="sub">${esc(g)}</div>
+    <div class="acts"><button data-addall="${esc(menus.slice(0, 15).map(m => m.id).join(','))}" data-near="${esc(key)}">Add its menus (${Math.min(15, menus.length)})</button><button data-rm="${esc(key)}">Remove</button></div>
+    <h3>Menus (${menus.length})</h3>${menus.map(m => `<div class="row"><span>${esc(menuPath(m.id))}</span>${addBtn(m.id, m.name, key)}</div>`).join('') || '<p class="note">No menu restricted to this group.</p>'}
+    <h3>Buttons (${buttons.length})</h3>${buttons.map(([mn, b]) => `<div class="row"><span>${esc(b.label)} <small>${esc(mn)}</small></span>${addBtn(`button:${mn}:${b.name}`, b.label, key)}</div>`).join('') || '<p class="note">No button restricted to this group.</p>'}
+    <h3>Model access (${access.length})</h3>${access.map(([mn, p]) => `<div class="row"><span>${esc(mn)}</span><span><small>${esc(p.toUpperCase())}</small> ${addBtn('model:' + mn, mn, key)}</span></div>`).join('')}`;
+}
+
+function showMethod(model, name) {
+  runQuery('who_method', model + '::' + name);
+}
+
+async function runQuery(kind, ref) {
+  const box = $('#q') || $('#detail');
+  const title = {impact: 'If it changes', who: 'Who changes it', reach: 'What it can change', who_method: 'Callers and effects'}[kind];
+  if ($('#q')) $('#q').innerHTML = `<h3>${esc(title)}: ${esc(ref)}</h3><p class="note">Reading the graph…</p>`;
+  try {
+    const qk = kind === 'who_method' ? 'reach' : kind;
+    const r = await api(`/api/query/${PID}/${S.key}?kind=${qk}&ref=${encodeURIComponent(ref)}&depth=4`);
+    const fields = new Set(r.nodes.filter(n => n.type === 'field').map(n => n.id));
+    const methods = new Set(r.nodes.filter(n => n.lvl === 1).map(n => n.id));
+    const nodesKeys = new Set();
+    for (const n of r.nodes) { if (n.model && S.nodes.has('model:' + n.model)) nodesKeys.add('model:' + n.model); if (n.type === 'menu' && S.nodes.has(n.id)) nodesKeys.add(n.id); }
+    const byId = new Map(r.nodes.map(n => [n.id, n]));
+    const edges = r.edges.map(e => ({sm: (byId.get(e.s) || {}).model, tm: (byId.get(e.t) || {}).model, label: e.k + (e.via ? ' via ' + e.via : '')}));
+    S.hits = {fields, methods, nodes: nodesKeys, edges, ref, kind};
+    const models = [...new Set(r.nodes.filter(n => n.model && M(n.model)).map(n => 'model:' + n.model))].filter(k => !S.nodes.has(k));
+    const menus = r.nodes.filter(n => n.type === 'menu' && menuById().has(n.id) && !S.nodes.has(n.id)).map(n => n.id);
+    render();
+    if ($('#q')) $('#q').innerHTML = `<h3>${esc(title)}: ${esc(ref)}</h3>
+      <div class="acts">
+        ${models.length ? `<button data-addall="${esc(models.join(','))}" data-near="${esc(S.sel || '')}">Add ${models.length} affected model(s)</button>` : ''}
+        ${menus.length ? `<button data-addall="${esc(menus.slice(0, 20).join(','))}" data-near="${esc(S.sel || '')}">Add ${Math.min(20, menus.length)} menu(s)</button>` : ''}
+        <button data-clearhits="1">Clear highlight</button></div>
+      <p class="note">Highlighted in the boxes; dashed orange lines link models on the canvas. Lines marked ~ are read from method bodies.</p>
+      <pre>${esc(r.text)}</pre>`;
+  } catch (e) { if ($('#q')) $('#q').innerHTML = `<h3>${esc(title)}</h3><p class="note">${esc(e.message)}</p>`; }
+}
+
+$('#detail').addEventListener('change', ev => {
+  const k = ev.target.dataset && ev.target.dataset.code;
+  if (k) { S.nodes.get(k).opts.code = ev.target.checked; render(); }
+});
+$('#detail').addEventListener('click', ev => {
+  const t = ev.target.closest('button'); if (!t) return;
+  const near = t.dataset.near || S.sel;
+  if (t.dataset.add) { addNode(t.dataset.add, near); render(); select(S.sel); }
+  else if (t.dataset.addall !== undefined) { const n = addMany(t.dataset.addall.split(',').filter(Boolean), near); select(S.sel); if (n > 3) fit(); }
+  else if (t.dataset.rm) removeNode(t.dataset.rm);
+  else if (t.dataset.toggleall) { const n = S.nodes.get(t.dataset.toggleall); n.opts.all = !n.opts.all; render(); select(S.sel); }
+  else if (t.dataset.wf !== undefined) { const n = S.nodes.get(S.sel); n.opts.wf = +t.dataset.wf; setLens('activity'); }
+  else if (t.dataset.q) runQuery(t.dataset.q, t.dataset.ref);
+  else if (t.dataset.clearhits) { S.hits = null; render(); if ($('#q')) $('#q').innerHTML = ''; }
+});
+
+// ---------------- left tree ----------------
+function markTree() { for (const it of document.querySelectorAll('#tree [data-key]')) it.classList.toggle('on-canvas', S.nodes.has(it.dataset.key)); }
+function renderTree() {
+  const q = $('#filter').value.trim().toLowerCase();
+  const match = s => !q || s.toLowerCase().includes(q);
+  let html = '';
+  if (S.tab === 'modules') {
+    const mods = Object.entries(S.C.modules).filter(([, m]) => m.models.length);
+    for (const [title, list] of [['Custom modules', mods.filter(([, m]) => m.custom)], ['Odoo and other modules', mods.filter(([, m]) => !m.custom)]]) {
+      const items = list.map(([name, m]) => {
+        const models = m.models.filter(x => match(x) || match(name));
+        if (!models.length) return '';
+        return `<details ${q ? 'open' : ''}><summary>${esc(name)} <small>${models.length}</small></summary>${models.map(x => `<div class="item" data-key="model:${esc(x)}" tabindex="0">${esc(x)} ${m.defines.includes(x) ? '' : '<span class="tag">ext</span>'} ${M(x).kind === 'transient' ? '<span class="tag">wizard</span>' : ''} ${M(x).workflows.length ? '<span class="tag">flow</span>' : ''}</div>`).join('')}</details>`;
+      }).join('');
+      if (items) html += `<div class="group-title">${title}</div>${items}`;
+    }
+  } else if (S.tab === 'menus') {
+    const kids = new Map();
+    for (const m of S.C.menus) (kids.get(m.parent) || kids.set(m.parent, []).get(m.parent)).push(m);
+    const sub = (id, depth) => (kids.get(id) || []).sort((a, b) => a.sequence - b.sequence || a.name.localeCompare(b.name)).map(m => {
+      const children = sub(m.id, depth + 1);
+      const ok = match(m.name) || children;
+      if (!ok) return '';
+      if (kids.has(m.id)) return `<details ${q ? 'open' : ''}><summary class="depth${Math.min(depth, 3)}">${esc(m.name)}${m.custom ? ' <span class="tag c">custom</span>' : ''}</summary>${m.action ? `<div class="item depth${Math.min(depth + 1, 3)}" data-key="${esc(m.id)}" tabindex="0">${esc(m.name)} <small>(itself)</small></div>` : ''}${children}</details>`;
+      return m.action ? `<div class="item depth${Math.min(depth, 3)}" data-key="${esc(m.id)}" tabindex="0">${esc(m.name)} ${m.model ? `<small>${esc(m.model)}</small>` : ''}${m.custom ? ' <span class="tag c">custom</span>' : ''}</div>` : '';
+    }).join('');
+    html = sub(null, 0) || '<p class="status" style="padding:10px">No menu matches.</p>';
+  } else {
+    const used = new Map();
+    for (const m of S.C.menus) for (const g of m.groups || []) used.set(g, (used.get(g) || 0) + 1);
+    for (const m of Object.values(S.C.models)) for (const b of m.buttons) for (const g of b.groups) used.set(g, (used.get(g) || 0) + 1);
+    const list = Object.entries(S.C.groups).filter(([g, d]) => match(d.name) || match(g)).sort((a, b) => (used.get(b[0]) || 0) - (used.get(a[0]) || 0));
+    html = `<div class="item" data-key="actor:__system" tabindex="0">System (cron)</div>` + list.map(([g, d]) => `<div class="item" data-key="actor:${esc(g)}" tabindex="0" title="${esc(g)}">${esc(d.name)} <small>${used.get(g) || 0}</small>${d.custom ? ' <span class="tag c">custom</span>' : ''}</div>`).join('');
+  }
+  $('#tree').innerHTML = html || '<p class="status" style="padding:10px">Nothing to show.</p>';
+  markTree();
+}
+$('#tree').addEventListener('click', ev => { const it = ev.target.closest('[data-key]'); if (!it) return; const k = it.dataset.key; if (!S.nodes.has(k)) { addNode(k); render(); } select(k); });
+$('#tree').addEventListener('keydown', ev => { if (ev.key === 'Enter') { const it = ev.target.closest('[data-key]'); if (it) it.click(); } });
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b))); renderTree(); });
+let ft; $('#filter').addEventListener('input', () => { clearTimeout(ft); ft = setTimeout(renderTree, 150); });
+
+// ---------------- lens ----------------
+function setLens(l) {
+  S.lens = l;
+  document.querySelectorAll('.lens button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lens === l)));
+  // keep positions, push apart what now overlaps (boxes change size between lenses)
+  for (const k of S.nodes.keys()) sizes.set(k, size(k));
+  const keys = [...S.nodes.keys()].sort((a, b) => S.nodes.get(a).y - S.nodes.get(b).y || S.nodes.get(a).x - S.nodes.get(b).x);
+  for (let pass = 0; pass < 3; pass++) for (let i = 0; i < keys.length; i++) for (let j = 0; j < i; j++) {
+    const A = boxOf(keys[j]), B = boxOf(keys[i]);
+    if (B.x < A.x + A.w + 30 && B.x + B.w + 30 > A.x && B.y < A.y + A.h + 30 && B.y + B.h + 30 > A.y) S.nodes.get(keys[i]).y = A.y + A.h + 40;
+  }
+  render(); if (S.sel) select(S.sel);
+}
+document.querySelectorAll('.lens button').forEach(b => b.onclick = () => setLens(b.dataset.lens));
+
+// ---------------- save / open / export ----------------
+async function save() {
+  const name = $('#dname').value.trim() || 'Untitled diagram';
+  $('#dname').value = name;
+  const r = await api(`/api/diagrams/${PID}`, {name, slug: S.slug, lens: S.lens, view: S.view, nodes: [...S.nodes.values()]});
+  S.slug = r.slug; updateUrl();
+  $('#save').textContent = 'Saved'; setTimeout(() => $('#save').textContent = 'Save', 1200);
+}
+$('#save').onclick = () => save().catch(e => alert(e.message));
+function openModal(title, html) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = html; $('#modal').classList.add('open'); $('#modalClose').focus(); }
+$('#modalClose').onclick = () => $('#modal').classList.remove('open');
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') $('#modal').classList.remove('open'); });
+$('#openD').onclick = async () => {
+  const {diagrams} = await api(`/api/diagrams/${PID}`);
+  openModal('Open a saved diagram', diagrams.map(d => `<div class="row"><span><b>${esc(d.name)}</b> <small>${d.nodes} nodes · ${new Date(d.updated * 1000).toLocaleString()}</small></span><span><button data-open="${esc(d.slug)}">Open</button> <button data-del="${esc(d.slug)}">Delete</button></span></div>`).join('') || '<p class="note">No saved diagram yet. Build one and press Save.</p>');
+};
+$('#modalBody').addEventListener('click', async ev => {
+  const t = ev.target.closest('button'); if (!t) return;
+  if (t.dataset.open) { await loadDiagram(t.dataset.open); $('#modal').classList.remove('open'); }
+  if (t.dataset.del && confirm('Delete this diagram?')) { await api(`/api/diagrams/${PID}/${t.dataset.del}/delete`, {}); $('#openD').click(); }
+});
+async function loadDiagram(slug) {
+  const d = await api(`/api/diagrams/${PID}/${slug}`);
+  S.slug = slug; $('#dname').value = d.name; S.nodes = new Map((d.nodes || []).map(n => [n.key, {key: n.key, x: n.x, y: n.y, opts: n.opts || {}}]));
+  S.hits = null; if (d.view) S.view = d.view; applyView(); setLens(d.lens || 'class'); select(null); updateUrl();
+}
+$('#newD').onclick = () => { if (S.nodes.size && !confirm('Start a new empty diagram? Unsaved changes are lost.')) return; S.nodes.clear(); S.slug = null; S.hits = null; $('#dname').value = ''; render(); select(null); updateUrl(); };
+$('#export').onclick = () => {
+  const svg = $('#svg').cloneNode(true);
+  const css = getComputedStyle(document.documentElement);
+  const vars = [...document.styleSheets[0].cssRules].map(r => r.cssText).filter(t => /^\.(n-|e|uc|st|tr|actor|node)/.test(t)).join('\n')
+    .replace(/var\((--[\w-]+)\)/g, (_, v) => css.getPropertyValue(v).trim());
+  const style = document.createElementNS(NS, 'style'); style.textContent = vars + `\ntext{font-family:system-ui,sans-serif}`;
+  svg.insertBefore(style, svg.firstChild);
+  svg.innerHTML = svg.innerHTML.replace(/var\((--[\w-]+)\)/g, (_, v) => css.getPropertyValue(v).trim());
+  svg.setAttribute('xmlns', NS);
+  const blob = new Blob([svg.outerHTML], {type: 'image/svg+xml'});
+  const a = Object.assign(document.createElement('a'), {href: URL.createObjectURL(blob), download: ($('#dname').value || 'odoo-diagram') + '.svg'});
+  a.click(); URL.revokeObjectURL(a.href);
+};
+function updateUrl() { const p = new URLSearchParams({project: PID, build: S.key}); if (S.slug) p.set('diagram', S.slug); history.replaceState(null, '', '/diagram?' + p); }
+
+// ---------------- builds ----------------
+async function loadBuild(key) {
+  $('#tree').innerHTML = '<p class="status" style="padding:10px">Loading the build…</p>';
+  const r = await api(`/api/catalog/${PID}/${key}`);
+  if (!r.catalog) throw new Error('This build has no diagram data: regenerate it from the dashboard.');
+  S.C = r.catalog; S.meta = r.meta; S.project = r.project; S.key = key; S._menus = null; S.hits = null;
+  $('#proj').textContent = r.project.name;
+  renderTree(); render(); if (S.sel) select(S.sel); updateUrl();
+}
+async function fillBuilds() {
+  const [{projects}, {branches}] = await Promise.all([api('/api/projects'), api(`/api/branches/${PID}`)]);
+  const p = projects.find(x => x.id === PID);
+  const opts = [];
+  if (p && p.working_copy.key) opts.push(['wc', `Working copy · ${p.working_copy.branch}`]);
+  const seen = new Set();
+  for (const b of branches) if (b.key && !seen.has(b.ref)) { seen.add(b.ref); opts.push([b.key, `${b.ref} · ${b.key.slice(0, 8)}${b.graph === 'outdated' ? ' (older build)' : ''}`]); }
+  $('#build').innerHTML = opts.map(([k, l]) => `<option value="${esc(k)}" ${k === S.key ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  if (!opts.some(([k]) => k === S.key) && opts.length) S.key = opts[0][0];
+}
+$('#build').onchange = () => loadBuild($('#build').value).catch(e => alert(e.message));
+
+(async () => {
+  if (!PID) { $('#tree').innerHTML = '<p class="status" style="padding:10px">Open the diagram from the dashboard.</p>'; return; }
+  try {
+    await fillBuilds();
+    if (!$('#build').options.length) { $('#tree').innerHTML = '<p class="status" style="padding:10px">No build yet: go back to the dashboard and press Generate on a branch.</p>'; return; }
+    await loadBuild(S.key);
+    if (S.slug) await loadDiagram(S.slug); else applyView();
+  } catch (e) { $('#tree').innerHTML = `<p class="status" style="padding:10px">${esc(e.message)}</p>`; }
+})();
+window.addEventListener('resize', () => applyView());
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@
             </field>
             <xpath expr="//header" position="inside">
                 <button name="action_apply_discount" type="object" string="Apply 10%"/>
+                <button name="action_send" type="object" string="Send" invisible="state != 'draft'"/>
                 <button name="%(action_discount_wizard)d" type="action" string="Set Discount"/>
             </xpath>
         </field>

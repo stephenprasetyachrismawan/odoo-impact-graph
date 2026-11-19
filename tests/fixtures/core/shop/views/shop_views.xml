@@ -6,7 +6,7 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <button name="action_confirm" type="object" string="Confirm"/>
+                    <button name="action_confirm" type="object" string="Confirm" groups="shop.group_shop_manager" invisible="state != 'draft'"/>
                 </header>
                 <field name="name"/>
                 <field name="partner_city"/>
@@ -34,6 +34,6 @@
         <field name="view_mode">tree,form</field>
     </record>
     <menuitem id="menu_root" name="Shop">
-        <menuitem id="menu_orders" name="Orders" action="action_orders"/>
+        <menuitem id="menu_orders" name="Orders" action="action_orders" groups="group_shop_user"/>
     </menuitem>
 </odoo>

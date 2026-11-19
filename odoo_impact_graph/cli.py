@@ -211,17 +211,21 @@ def cmd_project(args):
         print('project', pid, 'saved in', service.home('projects.json'))
     elif args.action == 'list':
         for p in service.overview():
-            print(f"{p['name']}  {p['repo']}")
-            for w in p['worktrees']:
-                g = w['graph']
-                st = 'no graph' if not g['exists'] else ('outdated: ' + g['reason'] if g['stale'] else 'up to date')
-                print(f"   {w['branch']:<50} {st}")
+            wc = p['working_copy']
+            print(f"{p['name']}  {p['repo']}  (id {p['id']})")
+            print(f"   working copy [{wc['branch']}]: {wc['graph']}")
+            for ref, sha in sorted(p['built_refs'].items()):
+                print(f"   {ref:<55} built at {sha[:8]}")
     elif args.action == 'build':
-        from .service import build_worktree
         from . import gitinfo
-        top = gitinfo.toplevel(args.repo) or args.repo
         try:
-            build_worktree(top)
+            if args.ref:
+                project = service.project_of(gitinfo.toplevel(args.repo) or args.repo)
+                if not project:
+                    sys.exit(f'{args.repo} is not in a registered project')
+                service.build_ref(project, args.ref)
+            else:
+                service.build_worktree(gitinfo.toplevel(args.repo) or args.repo)
         except ValueError as exc:
             sys.exit(str(exc))
 
@@ -345,6 +349,7 @@ def main(argv=None):
     pj.add_argument('--core', action='append', help='core folder (Odoo, Enterprise, OCA); repeatable')
     pj.add_argument('--modules')
     pj.add_argument('--name')
+    pj.add_argument('--ref', help='build: a branch / commit instead of the files on disk')
     pj.set_defaults(func=cmd_project)
 
     sy = sub.add_parser('service', help='run `serve` as a systemd --user service (Linux / WSL with systemd)')

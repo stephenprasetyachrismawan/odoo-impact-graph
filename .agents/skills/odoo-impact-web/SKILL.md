@@ -1,6 +1,6 @@
 ---
 name: odoo-impact-web
-description: Opens the odoo-impact web service and explorer - the localhost dashboard (http://127.0.0.1:8770/) that lists every git worktree of an Odoo project with a Generate button, graph state, Changes vs a branch and Ask, and the interactive explorer that shows a graph as five lanes (menu/action, view/button, model, logic, field) with highlighted paths - and explains how to read them. Use when the user wants to see, show, open or browse the impact graph visually ("lihat web impact graph", "buka explorer", "tampilkan graf dampak"), or wants a link or screenshot of the impact of a field, method, button or menu.
+description: Opens the odoo-impact web service - the localhost dashboard (http://127.0.0.1:8770/) that lists an Odoo project's branches with Generate (built from git, no checkout), Diagram and Changes, and the interactive diagram that draws the code as a combined UML class / use case / activity diagram (models and relations, security groups and menus/buttons, state workflows) with impact highlighting - and explains how to use them. Use when the user wants to see, show, open, browse or explore the code visually ("lihat web impact graph", "buka diagram", "tampilkan class diagram / use case / activity diagram", "graf dampak"), or wants a picture of a model, workflow or flow for a report.
 ---
 
 # Odoo impact web service and explorer
@@ -12,16 +12,38 @@ odoo-impact service status       # running? (systemd --user unit `odoo-impact`)
 odoo-impact service install      # install + start, or: odoo-impact serve --open
 ```
 
-Give the user **http://127.0.0.1:8770/**. Per worktree of each registered project:
+Give the user **http://127.0.0.1:8770/**. Per project:
 
-- **Generate / Regenerate**: builds that worktree's graph in the background (5-10 s for ~200 modules).
-- Graph state: *no graph*, *up to date*, *outdated* (new commits or uncommitted changes since the build).
-- **Open**: the explorer of that worktree (`/explore/<id>`).
-- **Changes**: what the worktree's commits + uncommitted edits touch vs `HEAD` or a branch, and the screens to retest.
-- **Ask**: if it changes / who changes it / from here, as text.
+- **Working copy**: the files on disk (uncommitted edits included).
+- **Branches** (local; tick *include remote* for `origin/…`; filter box): **Generate** builds the branch's commit
+  straight from git (`git archive`, no checkout), state *no graph* / *up to date* / *outdated*.
+- **Diagram**: the interactive diagram of that build. **Changes**: what the branch touches vs another ref
+  (default `origin/preprod`) and the screens to retest.
 
 A project missing from the list → **Add project** (repository + odoo.conf, or core folders), or
 `odoo-impact project add <repo> --conf <odoo.conf>`; see `odoo-impact-setup`.
+
+## Interactive diagram
+
+URL: `/diagram?project=<id>&build=<wc|commit sha>[&diagram=<saved slug>]` (the dashboard links it).
+
+- Left panel, no search needed: **Modules** (custom first; models tagged `ext`, `wizard`, `flow`), **Menus**
+  (real menu tree), **Actors** (security groups as Odoo names them, plus System (cron)). Click = put on canvas.
+- Select a node; the right panel lists what it connects to with **add**: relations, parents, buttons (use cases
+  with their groups), menus, access rights, workflows; for menus / buttons the actors and *what it can change*;
+  for actors their menus, buttons and model access.
+- Lenses on the same nodes: **Class** (UML class boxes: `/derived`, `[1]` required, custom in bold, `+public` /
+  `-private` methods; associations with multiplicity, generalization for `_inherit`, composition for
+  `_inherits`), **Use case** (actors → menus / buttons → model), **Activity** (state chart from the Selection field:
+  buttons that write the state, from-states from `invisible` / `states` / `attrs`, groups; code / cron transitions
+  behind a checkbox).
+- Click a field in a class box = impact of changing it (highlighted rows, orange dashed arrows between models on
+  the canvas, buttons to add affected models / menus, full text report). Click a method = what it can change.
+- **Arrange**, **Fit**, drag / pan / wheel zoom, **Save** (named, stored in the service, reopen on any branch),
+  **Open…**, **SVG** download.
+
+To build a diagram for the user: open it, put the models / menus / actors they named on the canvas, pick the lens,
+Arrange, Save under a clear name, and give them the URL with `&diagram=<slug>`.
 
 ## Single graph file (no service)
 

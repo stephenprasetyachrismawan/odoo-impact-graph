@@ -12,7 +12,7 @@ Know what a change in an Odoo code base will touch **before** you make it, and l
 | L1 | compute methods, constraints, onchanges, `write` / `create` / `copy` / `unlink` overrides, other methods |
 | L0 | fields |
 
-It runs as a **local web service**. The dashboard lists every git worktree of your project; press **Generate** on a worktree to build its graph, then open it, ask it questions, or see what the branch changes.
+It runs as a **local web service**. The dashboard lists the branches of your project; **Generate** builds a branch's graph straight from git. **Diagram** then opens an interactive canvas where you explore the code as a combined class, use case and activity diagram (models, menus, security groups, state workflows), all read from the code.
 
 It answers these questions:
 - **If this field or method changes:** which fields recompute, which constraints, onchanges and hooks run, and on which views, actions and menus the user sees it.
@@ -180,7 +180,7 @@ A label works too, for example `"Sales/Orders/Quotations"`.
 | (none) | the running registry, or declarations (fields, `@api.*`, views, actions, menus) | exact / reliable |
 | `~` | method bodies: `'x' in vals`, `vals.get('x')`, `.write({...})`, `self.env['m'].create({...})`, `rec.x = ...`, calls, `res_model` / `env.ref` | heuristic; check the `file:line` |
 
-## 4. Web service: dashboard with one-click Generate per worktree
+## 4. Web service: branches, Generate, interactive diagram
 
 Run it once as a service. It stays on **http://127.0.0.1:8770/**.
 
@@ -191,33 +191,93 @@ odoo-impact service status
 odoo-impact serve --open
 ```
 
-In the dashboard:
+### Dashboard
 
-1. **Add project.** Give the git repository of your custom addons and its `odoo.conf`, or the Odoo / Enterprise folders. In the conf, folders inside the repository are swapped for the worktree being built; the other folders are core.
-2. **See every git worktree of the repository**, with its branch, last commit and graph state:
+1. **Add project.** Give the git repository of your custom addons and its `odoo.conf`, or the Odoo / Enterprise folders. In the conf, folders inside the repository are swapped for the code being built; the other folders are core.
+2. **Working copy** (top row) is the files on disk, uncommitted edits included.
+3. **Branches**: every local branch, newest commit first, plus remote (`origin/…`) ones when you tick the box. Use the filter box to narrow the list.
+4. **Generate** reads that branch's commit straight from git (`git archive` of its `.py`, `.xml` and `.csv` files), so nothing is checked out and your working copy is untouched. It takes about 5–10 s for ~200 modules. Branches pointing at the same commit share the build.
+
+   Each branch shows its graph state:
 
    | State | Meaning |
    |---|---|
    | no graph | never generated |
-   | up to date | matches the current commit |
-   | outdated | new commits, or uncommitted changes, since the last build |
+   | up to date | built at the branch's current commit |
+   | outdated | the branch moved since the build |
 
-3. **Generate / Regenerate** builds the graph of that worktree in the background, in about 5–10 s for ~200 modules.
-4. **Open** shows the explorer of that worktree.
-5. **Changes** lists what the worktree's commits and uncommitted edits touch, compared with `HEAD` or any branch (`origin/main`, `preprod`…), and the screens to retest.
-6. **Ask** answers if it changes / who changes it / from here, as text.
+5. **Diagram** opens the interactive diagram of that build.
+6. **Changes** lists what the branch touches compared with another branch (default `origin/preprod`; type any ref), and the screens to retest.
+
+### Interactive diagram: class + use case + activity on one canvas
+
+You don't search first; you explore. The left panel lists everything read from the code:
+
+- **Modules**: custom modules first, then the others. Each module lists its models, tagged `ext` (extends a model of another module), `wizard` (TransientModel) or `flow` (has a state workflow).
+- **Menus**: the real menu tree, with each menu's model.
+- **Actors**: the security groups, named like Odoo shows them (`Sales / Administrator`), plus *System (cron)*.
+
+Click an item to put it on the canvas, then select it. The right panel lists what it connects to, and **add** puts any of them on the canvas:
+
+- **Model**:
+  - relations (many2one / one2many / many2many, with the field name);
+  - inherited mixins;
+  - buttons of its views (use cases), with the groups allowed to press them;
+  - menus that open it;
+  - `ir.model.access` rights per group;
+  - its workflows.
+- **Menu / button**: the model it works on, the actors (groups) that can use it, and *what it can change*.
+- **Actor**: its menus, its buttons and its model access.
+
+Three **lenses** redraw the same nodes:
+
+**Class**
+- Each model is a UML class box: fields with types, `/derived` (computed), `[1]` (required), custom ones in bold, then methods (`+public`, `-private`).
+- Associations show multiplicity and pair a one2many with its many2one.
+- `_inherit` draws a generalization arrow; `_inherits` draws a composition.
+
+**Use case**
+- Actors (stick figures) are linked to the menus and buttons their group may use.
+- Use cases point to the model they work on.
+
+**Activity**
+- Each model with a state workflow becomes a state chart read from the code:
+  - the states come from the `Selection` field, including `selection_add`, in Odoo's order;
+  - the start state is the field's `default`;
+  - a transition is a button whose method (or something it calls, up to 3 calls deep) writes the field: `.write({'state': 'x'})`, `rec.state = 'x'`, or `self.write(self._prepare_…())`;
+  - its *from* states come from the button's `invisible` / `states` / `attrs`;
+  - it is labelled with the button text and the groups allowed to press it.
+- Transitions done only by code or crons are hidden until you tick *also show transitions done by code and crons*.
+
+**Impact on the canvas**
+- Click a field in a class box to see the impact of changing it.
+- Click a method to see what it can change.
+- Affected fields and methods are highlighted in their boxes, dashed orange arrows join the models on the canvas, and buttons add the affected models or menus. The full text report is in the panel.
+
+**Moving around and saving**
+- Drag boxes to move them, drag the background to pan, and use the wheel to zoom.
+- **Arrange** lays the diagram out, and **Fit** frames it.
+- **Save** stores the diagram in the service under a name (`diagrams/<project>/`). **Open…** reopens it, on any branch: nodes missing in that build are drawn dashed.
+- **SVG** downloads the picture.
 
 Without a browser:
 
 ```bash
 odoo-impact project add /path/to/repo --conf /path/to/odoo.conf   # register
-odoo-impact project list                                          # worktrees and graph state
-odoo-impact project build /path/to/a/worktree                     # generate one
+odoo-impact project list                                          # working copy + built branches
+odoo-impact project build /path/to/repo                           # working copy
+odoo-impact project build /path/to/repo --ref origin/preprod      # a branch, from git
 ```
 
-Service data lives in `~/.local/share/odoo-impact` (`ODOO_IMPACT_HOME`): `projects.json`, plus one `graphs/<id>/graph.json` per worktree.
+Service data lives in `~/.local/share/odoo-impact` (`ODOO_IMPACT_HOME`):
+- `projects.json`;
+- `graphs/<project>/<commit>.json`;
+- `trees/<project>/<commit>/` (extracted sources);
+- `diagrams/<project>/`.
 
-The service listens on 127.0.0.1 only. It refuses foreign `Host` headers (DNS rebinding), and it only starts builds on requests that carry its own header, which a web page on another site cannot send. To reach it from another machine, use an SSH tunnel; don't expose it.
+Builds of commits no branch points at any more are deleted automatically.
+
+The service listens on 127.0.0.1 only. It refuses foreign `Host` headers (DNS rebinding), and it only accepts writes (builds, saved diagrams) carrying its own request header, which a web page on another site cannot send. To reach it from another machine, use an SSH tunnel; don't expose it.
 
 ## 5. One graph without the service (web view)
 
@@ -343,7 +403,7 @@ Restart the agent afterwards. Then ask it to *"set up odoo-impact for this proje
 pipx install git+https://github.com/stephenprasetyachrismawan/odoo-impact-graph.git
 odoo-impact service install                                            # dashboard on http://127.0.0.1:8770/
 odoo-impact project add /path/to/custom-addons-repo --conf /path/to/odoo.conf
-odoo-impact project build /path/to/custom-addons-repo                  # or press Generate in the dashboard
+odoo-impact project build /path/to/custom-addons-repo                  # working copy; or press Generate on a branch
 claude mcp add odoo-impact -s user -- odoo-impact mcp --auto           # the agent sees the graph of its worktree
 git clone https://github.com/stephenprasetyachrismawan/odoo-impact-graph.git ~/src/odoo-impact-graph
 ~/src/odoo-impact-graph/scripts/install-skills.sh                      # skills for the agent
@@ -358,6 +418,11 @@ Without the service, a single project folder works too: `odoo-impact build --fro
 - **one2many `domain` dependencies are not added.** Odoo adds them; the source build does not.
 - **Method-body edges (`~`) are pattern-based.** A write through a variable that holds a model (`Order = self.env['sale.order']; Order.create(...)`) is not seen.
 - **`diff` maps Python lines only.** For XML-only changes, query the changed view or button with `node`.
+- **Workflow transitions are read from code patterns.**
+  - Writes are followed only up to 3 calls deep from a button.
+  - A state written through a variable (`vals['state'] = x`) is not seen.
+  - The from-states are read only from simple `invisible` / `states` / `attrs` rules. A rule combined with `and` leaves the transition as *any state*.
+- **Actors are security groups as declared in XML.** Implied groups are not expanded.
 
 ## Development
 

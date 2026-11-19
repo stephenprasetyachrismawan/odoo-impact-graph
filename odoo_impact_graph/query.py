@@ -136,9 +136,10 @@ class Graph:
                 writers |= {n for n in self.bfs([f], WHO, 3, reverse=True, core_logic=core_logic) if n != f}
         return {'roots': ids, 'reached': reached, 'ui': views | actions | menus, 'writers': writers}
 
-    def diff(self, repo, base='HEAD', depth=6, core_logic=False):
-        """Fields / methods whose source lines changed between base and the working tree."""
-        lines = changed_lines(repo, base)
+    def diff(self, repo, base='HEAD', depth=6, core_logic=False, lines=None):
+        """Fields / methods whose source lines changed between base and the working tree
+        (or `lines` = {absolute file: {line numbers}} computed by the caller)."""
+        lines = changed_lines(repo, base) if lines is None else lines
         touched, only_at = set(), defaultdict(set)
         for nid, n in self.nodes.items():
             for loc in n.get('files') or ():

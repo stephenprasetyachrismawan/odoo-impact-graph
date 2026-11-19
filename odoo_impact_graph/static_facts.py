@@ -11,7 +11,7 @@ import re
 from collections import defaultdict
 
 from . import modules as modmod
-from . import pyscan, xmlscan
+from . import catalog, pyscan, xmlscan
 
 MAGIC = {
     'id': {'type': 'Id', 'string': 'ID', 'store': True},
@@ -22,6 +22,34 @@ MAGIC = {
     'write_date': {'type': 'Datetime', 'string': 'Last Updated on', 'store': True},
 }
 CODE_CALL = re.compile(r'\.(\w+)\(')
+
+
+def merge_selection(base, add):
+    """Odoo's selection_add: merge_sequences(old values, added values) then labels (later wins).
+    A one-item tuple only gives a position: [('sent', 'Sent'), ('done',)] puts sent before done."""
+    labels = {v: lab for v, lab in base}
+    labels.update({v: lab for v, lab in add if lab is not None})
+    deps = {}
+    for seq in ([v for v, _ in base], [v for v, _ in add]):
+        prev = None
+        for value in seq:
+            deps.setdefault(value, [])
+            if prev is not None:
+                deps[value].append(prev)
+            prev = value
+    order, seen = [], set()
+
+    def visit(value):
+        if value in seen:
+            return
+        seen.add(value)
+        for dep in deps[value]:
+            visit(dep)
+        order.append(value)
+
+    for value in deps:
+        visit(value)
+    return [[v, labels.get(v, v)] for v in order]
 
 
 def build(paths, core_paths=(), custom_paths=(), wanted=None, log=print):
@@ -83,6 +111,9 @@ def build(paths, core_paths=(), custom_paths=(), wanted=None, log=print):
                     for k in ('compute', 'related', 'store', 'comodel'):  # redefinition, not an extension
                         if k not in attrs:
                             merged.pop(k, None)
+                if attrs.get('selection_add'):
+                    merged['selection'] = merge_selection(base.get('selection') or [], attrs['selection_add'])
+                    merged.pop('selection_add', None)
                 merged['modules'] = base['modules'] + [cls['module']]
                 merged['loc'] = base['loc'] + [attrs['loc']]
                 result[fname] = merged
@@ -142,6 +173,9 @@ def build(paths, core_paths=(), custom_paths=(), wanted=None, log=print):
                 'related': f.get('related') or '', 'comodel': f.get('comodel') or '',
                 'modules': sorted(set(f.get('modules', []))), 'loc': f.get('loc', []),
                 'custom': any(m in custom_mods for m in f.get('modules', [])),
+                'selection': f.get('selection') or [], 'default': f.get('default'),
+                'required': bool(f.get('required')), 'inverse_name': f.get('inverse_name') or '',
+                'groups': f.get('groups') or '',
             }
         facts['fields'][model] = out
 
@@ -354,6 +388,9 @@ def build(paths, core_paths=(), custom_paths=(), wanted=None, log=print):
         if m.get('action'):
             facts['menus'].append({'id': f'menu:{xid}', 'xmlid': xid, 'name': menu_name(xid),
                                    'action': f"action:{m['action']}", 'custom': m.get('module') in custom_mods})
+
+    facts['catalog'] = catalog.build(facts, mods, order, classes, kind, parents, inherits, all_methods,
+                                     raw, model_ref, custom_mods)
 
     log(f"{len(facts['models'])} models, {sum(len(f) for f in facts['fields'].values())} fields, "
         f"{len(facts['views'])} views, {len(facts['actions'])} actions, {len(facts['menus'])} menus")

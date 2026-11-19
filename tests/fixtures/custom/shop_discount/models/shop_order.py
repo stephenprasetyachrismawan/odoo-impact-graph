@@ -10,6 +10,7 @@ class ShopOrder(models.Model):
     discount = fields.Float('Discount (%)')
     amount_net = fields.Float('Net Amount', compute='_compute_amount_net', store=True)
     note = fields.Char()
+    state = fields.Selection(selection_add=[('sent', 'Sent'), ('done',)])
 
     @api.depends(*NET_DEPENDS)
     def _compute_amount_net(self):
@@ -35,3 +36,8 @@ class ShopOrder(models.Model):
     def _cron_reset_discount(self):
         for order in self.search([]):
             order.discount = 0
+            order.state = 'draft'
+
+    def action_send(self):
+        for order in self:
+            order.state = 'sent'

@@ -34,18 +34,44 @@ def _record_values(rec, module):
     return values
 
 
-def data_files(module_path, manifest):
+def data_files(module_path, manifest, ext='.xml'):
     files = []
     for key in ('data', 'init_xml', 'update_xml'):
         for rel in manifest.get(key, []) or []:
-            if rel.endswith('.xml'):
+            if rel.endswith(ext):
                 files.append(rel)
     return files
 
 
+def _access_csv(path, module):
+    """Rows of an ir.model.access.csv: model ref, group xmlid, read/write/create/unlink."""
+    import csv
+    rows = []
+    try:
+        with open(path, encoding='utf-8') as fh:
+            for row in csv.DictReader(fh):
+                model_ref = (row.get('model_id:id') or row.get('model_id/id') or '').strip()
+                group = (row.get('group_id:id') or row.get('group_id/id') or '').strip()
+                if not model_ref:
+                    continue
+                rows.append({
+                    'model_ref': model_ref.split('.')[-1], 'group': _xmlid(module, group) if group else None,
+                    'perms': ''.join(flag for flag, key in (('r', 'perm_read'), ('w', 'perm_write'),
+                                                            ('c', 'perm_create'), ('u', 'perm_unlink'))
+                                     if str(row.get(key, '')).strip() in ('1', 'True', 'true')),
+                })
+    except (OSError, csv.Error, UnicodeDecodeError):
+        pass
+    return rows
+
+
 def scan_module(module_name, module_path, manifest, repo_root=None):
     """Raw XML records of the module, in manifest order."""
-    out = {'views': [], 'actions': [], 'action_views': [], 'menus': [], 'reports': [], 'crons': [], 'server_actions': []}
+    out = {'views': [], 'actions': [], 'action_views': [], 'menus': [], 'reports': [], 'crons': [], 'server_actions': [],
+           'groups': [], 'categories': [], 'access': []}
+    for rel in data_files(module_path, manifest, '.csv'):
+        if os.path.basename(rel) == 'ir.model.access.csv':
+            out['access'].extend(_access_csv(os.path.join(module_path, rel), module_name))
     for rel in data_files(module_path, manifest):
         path = os.path.join(module_path, rel)
         if not os.path.isfile(path):
@@ -74,6 +100,8 @@ def _walk(element, module, loc, out, parent_menu):
                 'xmlid': xid, 'name': el.get('name'), 'loc': loc,
                 'parent': _xmlid(module, el.get('parent')) if el.get('parent') else parent_menu,
                 'action': _xmlid(module, el.get('action')) if el.get('action') else None,
+                'groups': [_xmlid(module, g.strip().lstrip('-')) for g in (el.get('groups') or '').split(',') if g.strip()],
+                'sequence': int(el.get('sequence')) if (el.get('sequence') or '').isdigit() else 10,
             })
             _walk(el, module, loc, out, xid)  # nested menuitems
         elif tag == 'act_window':
@@ -133,11 +161,18 @@ def _record(rec, module, loc, out):
         out['reports'].append({'xmlid': xid, 'name': v.get('name'), 'model': v.get('model'), 'loc': loc})
     elif model == 'ir.ui.menu':
         action = v.get('action')
+        groups = v.get('groups_id')
         out['menus'].append({
             'xmlid': xid, 'name': v.get('name'), 'loc': loc,
             'parent': _first(v.get('parent_id')),
             'action': _first(action) if isinstance(action, list) else None,
+            'groups': groups if isinstance(groups, list) else [],
+            'sequence': int(v['sequence']) if str(v.get('sequence', '')).isdigit() else 10,
         })
+    elif model == 'res.groups':
+        out['groups'].append({'xmlid': xid, 'name': v.get('name'), 'category': _first(v.get('category_id'))})
+    elif model == 'ir.module.category':
+        out['categories'].append({'xmlid': xid, 'name': v.get('name')})
 
 
 def arch_items(arch_root, model, fields_of, comodel_of):
@@ -178,8 +213,11 @@ def arch_items(arch_root, model, fields_of, comodel_of):
             elif child.tag == 'button' and child.get('name') and child.get('type') in ('object', 'action'):
                 name = child.get('name')
                 m = ACTION_REF.match(name)
+                inner = ' '.join(t.strip() for t in child.itertext() if t.strip())[:60]  # smart button text
                 items.append(('button', ctx, name, child.get('type'), m.group(1) if m else None,
-                              child.get('string') or child.get('title') or name))
+                              child.get('string') or child.get('title') or inner or name,
+                              child.get('groups') or '',
+                              {k: child.get(k) for k in ('invisible', 'states', 'attrs') if child.get(k)}))
             walk(child, ctx)
 
     walk(arch_root, model)

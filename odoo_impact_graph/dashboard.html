@@ -57,6 +57,12 @@ td .branch { font-weight: 600; color: var(--ink); font-size: 13px; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
 .toolbar input, .toolbar select { width: auto; flex: 1 1 200px; }
 .empty { color: var(--muted); padding: 20px 14px; }
+.toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); }
+.toolbar input[type=text], .toolbar input:not([type]) { width: auto; flex: 1 1 240px; }
+label.check { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 13px; color: var(--ink); white-space: nowrap; }
+label.check input { width: auto; flex: none; margin: 0; }
+tr.wc td { background: var(--soft); }
+a.primary-link { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--soft); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
 .hint { color: var(--muted); font-size: 13px; }
 @media (max-width: 760px) {
@@ -72,7 +78,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--
 <header>
   <div>
     <h1>Odoo Impact</h1>
-    <p>Generate the impact graph of any worktree, open it, see what a branch touches.</p>
+    <p>Pick a branch, Generate its graph from the code, open it as an interactive diagram, see what it changes.</p>
   </div>
   <button class="primary" id="addToggle" aria-expanded="false" aria-controls="addForm">Add project</button>
 </header>
@@ -104,7 +110,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--
     </form>
   </section>
   <div id="projects"><p class="empty">Loading…</p></div>
-  <p class="hint">AI agents: <code>odoo-impact mcp --auto</code> serves the graph of the worktree the agent runs in
+  <p class="hint">AI agents: <code>odoo-impact mcp --auto</code> serves the graph of the folder the agent works in
     (Claude Code: <code>claude mcp add odoo-impact -s user -- odoo-impact mcp --auto</code>).</p>
 </main>
 
@@ -135,61 +141,97 @@ const ago = t => {
   if (s < 129600) return Math.round(s / 3600) + ' h ago';
   return Math.round(s / 86400) + ' days ago';
 };
-
-let state = {projects: []};
+const ui = JSON.parse((() => { try { return localStorage.getItem('oig-ui') || '{}'; } catch (e) { return '{}'; } })());
+const saveUi = () => { try { localStorage.setItem('oig-ui', JSON.stringify(ui)); } catch (e) {} };
+let projects = [];
+const branchCache = {};
 const polling = new Set();
 
-function status(w) {
-  if (w.job && (w.job.state === 'running' || w.job.state === 'queued')) return `<span class="badge warn">${w.job.state}…</span>`;
-  if (w.job && w.job.state === 'failed') return `<span class="badge bad">failed</span> <a href="#" data-log="${w.job.id}">log</a>`;
-  const g = w.graph;
-  if (!g.exists) return '<span class="badge muted">no graph</span>';
-  const built = `<div class="sub">built ${ago(g.built_at)} at ${esc(g.built_head)}</div>`;
-  return g.stale ? `<span class="badge warn">outdated</span><div class="sub">${esc(g.reason)}</div>${built}`
-                 : `<span class="badge ok">up to date</span>${built}`;
+function badge(state, job) {
+  if (job && ['running', 'queued'].includes(job.state)) return `<span class="badge warn">${job.state}…</span>`;
+  if (job && job.state === 'failed') return `<span class="badge bad">failed</span> <a href="#" data-log="${job.id}">log</a>`;
+  return {'up to date': '<span class="badge ok">up to date</span>', 'outdated': '<span class="badge warn">outdated</span>'}[state] || '<span class="badge muted">no graph</span>';
+}
+const busy = job => job && ['running', 'queued'].includes(job.state);
+
+function actions(p, ref, key, job, label) {
+  return `<div class="actions">
+    <button data-build="${esc(ref)}" data-project="${p.id}" ${busy(job) ? 'disabled' : ''}>${key ? 'Regenerate' : 'Generate'}</button>
+    ${key ? `<a class="btn primary-link" href="/diagram?project=${p.id}&build=${encodeURIComponent(key)}">Diagram</a>
+    <button data-diff="${esc(key)}" data-project="${p.id}" data-label="${esc(label)}">Changes</button>` : ''}
+  </div>`;
+}
+
+function renderProject(p) {
+  const st = ui[p.id] || (ui[p.id] = {remote: false, filter: '', limit: 25});
+  const wc = p.working_copy;
+  const all = branchCache[p.id] || [];
+  const f = st.filter.toLowerCase();
+  const list = all.filter(b => (st.remote || !b.remote) && (!f || b.ref.toLowerCase().includes(f) || b.subject.toLowerCase().includes(f)));
+  const rows = list.slice(0, st.limit).map(b => `
+    <tr>
+      <td><div class="branch">${esc(b.ref)}</div><div class="sub">${b.remote ? 'remote' : 'local'}</div></td>
+      <td><code>${esc(b.sha.slice(0, 8))}</code> ${esc(b.subject).slice(0, 110)}<div class="sub">${ago(b.date)}</div></td>
+      <td>${badge(b.graph, b.job)}</td>
+      <td>${actions(p, b.ref, b.key, b.job, b.ref)}</td>
+    </tr>`).join('');
+  return `
+    <section class="card">
+      <div class="card-head">
+        <div><h2>${esc(p.name)}</h2><small>${esc(p.repo)}${p.conf ? ' · ' + esc(p.conf) : ''}${p.core.length ? ' · core ' + esc(p.core.join(', ')) : ''}</small></div>
+        <button data-del="${p.id}" aria-label="Remove project ${esc(p.name)}">Remove</button>
+      </div>
+      <table>
+        <thead><tr><th>Branch</th><th>Last commit</th><th>Graph</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr class="wc">
+            <td><div class="branch">Working copy</div><div class="sub">${esc(wc.branch)} · files on disk${wc.dirty ? ', <b>uncommitted edits</b>' : ''}</div></td>
+            <td><code>${esc((wc.head || '').slice(0, 8))}</code> ${esc(wc.subject).slice(0, 110)}<div class="sub">${wc.built_at ? 'built ' + ago(wc.built_at) : ''}</div></td>
+            <td>${badge(wc.graph, wc.job)}</td>
+            <td>${actions(p, '__wc__', wc.key, wc.job, 'working copy')}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="toolbar">
+        <input data-filter="${p.id}" value="${esc(st.filter)}" placeholder="Filter branches by name or commit" aria-label="Filter branches">
+        <label class="check"><input type="checkbox" data-remote="${p.id}" ${st.remote ? 'checked' : ''}> include remote (origin/…)</label>
+        <span class="sub">${list.length} branch(es), newest commit first</span>
+      </div>
+      <table>
+        <tbody>${rows || '<tr><td colspan="4" class="empty">No branch matches.</td></tr>'}</tbody>
+      </table>
+      ${list.length > st.limit ? `<p style="padding:0 14px 12px"><button data-more="${p.id}">Show ${Math.min(25, list.length - st.limit)} more</button></p>` : ''}
+    </section>`;
 }
 
 function render() {
   const root = $('#projects');
-  if (!state.projects.length) {
+  if (!projects.length) {
     root.innerHTML = '<section class="card"><p class="empty">No project yet. Press <b>Add project</b>, give the git repository of your custom addons and its odoo.conf (or the Odoo / Enterprise folders).</p></section>';
     return;
   }
-  root.innerHTML = state.projects.map(p => `
-    <section class="card">
-      <div class="card-head">
-        <div><h2>${esc(p.name)}</h2><small>${esc(p.repo)}${p.conf ? ' · conf ' + esc(p.conf) : ''}${p.core.length ? ' · core ' + esc(p.core.join(', ')) : ''}</small></div>
-        <button data-del="${p.id}" aria-label="Remove project ${esc(p.name)}">Remove</button>
-      </div>
-      <table>
-        <thead><tr><th>Worktree</th><th>Last commit</th><th>Graph</th><th>Actions</th></tr></thead>
-        <tbody>${p.worktrees.map(w => `
-          <tr>
-            <td><div class="branch">${esc(w.branch)}</div><div class="sub" style="word-break:break-all">${esc(w.path)}</div></td>
-            <td><code>${esc(w.head)}</code> ${esc(w.subject).slice(0, 110)}${w.dirty ? ' <span class="badge warn">uncommitted</span>' : ''}</td>
-            <td>${status(w)}</td>
-            <td><div class="actions">
-              <button data-build="${w.gid}" ${w.job && ['running','queued'].includes(w.job.state) ? 'disabled' : ''}>${w.graph.exists ? 'Regenerate' : 'Generate'}</button>
-              ${w.graph.exists ? `<a class="btn" href="/explore/${w.gid}" target="_blank" rel="noopener">Open</a>
-              <button data-diff="${w.gid}" data-branch="${esc(w.branch)}">Changes</button>
-              <button data-ask="${w.gid}" data-branch="${esc(w.branch)}">Ask</button>` : ''}
-            </div></td>
-          </tr>`).join('') || '<tr><td colspan="4" class="empty">No worktree found.</td></tr>'}
-        </tbody>
-      </table>
-    </section>`).join('');
+  const focus = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.filter;
+  root.innerHTML = projects.map(renderProject).join('');
+  if (focus) { const i = document.querySelector(`[data-filter="${focus}"]`); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
 }
 
 async function refresh() {
-  try { state = await api('/api/projects'); render(); }
-  catch (e) { $('#projects').innerHTML = `<p class="empty bad">${esc(e.message)}</p>`; }
+  try {
+    projects = (await api('/api/projects')).projects;
+    await Promise.all(projects.map(async p => { branchCache[p.id] = (await api(`/api/branches/${p.id}`)).branches; }));
+    render();
+    for (const p of projects) {
+      if (busy(p.working_copy.job)) poll(p.working_copy.job.id);
+      for (const b of branchCache[p.id]) if (busy(b.job)) poll(b.job.id);
+    }
+  } catch (e) { $('#projects').innerHTML = `<p class="empty bad">${esc(e.message)}</p>`; }
 }
 
 async function poll(jid) {
   if (polling.has(jid)) return;
   polling.add(jid);
   for (;;) {
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1200));
     const job = await api('/api/jobs/' + jid).catch(() => null);
     if (!job || !['queued', 'running'].includes(job.state)) break;
   }
@@ -206,60 +248,49 @@ function openPanel(title, tools, text) {
 }
 function closePanel() { $('#panel').classList.remove('open'); }
 
-async function showDiff(gid, branch, base) {
+async function showDiff(pid, key, label, base) {
   const tools = `<label for="base" style="margin:0">Compare with</label>
-    <input id="base" value="${esc(base)}" placeholder="HEAD = uncommitted, or origin/preprod, master…">
+    <input id="base" value="${esc(base)}" placeholder="origin/preprod, master, HEAD (uncommitted)…">
     <button class="primary" id="runDiff">Show</button>`;
-  openPanel(`Changes in ${branch}`, tools, 'Working…');
-  $('#runDiff').onclick = () => showDiff(gid, branch, $('#base').value || 'HEAD');
+  openPanel(`What ${label} changes`, tools, 'Working…');
+  $('#runDiff').onclick = () => showDiff(pid, key, label, $('#base').value || 'HEAD');
   $('#base').onkeydown = e => { if (e.key === 'Enter') $('#runDiff').click(); };
   try {
-    const r = await api(`/api/diff/${gid}?base=${encodeURIComponent(base)}`);
+    const r = await api(`/api/diff/${pid}/${encodeURIComponent(key)}?base=${encodeURIComponent(base)}`);
     $('#panelText').textContent = r.text;
   } catch (e) { $('#panelText').textContent = e.message; }
 }
 
-function showAsk(gid, branch) {
-  const tools = `<select id="kind" aria-label="Question">
-      <option value="impact">If it changes →</option><option value="who">← Who changes it</option><option value="reach">From here ↓</option>
-    </select>
-    <input id="ref" placeholder="sale.order.amount_total, sale.order::action_confirm, a menu label…" aria-label="Field, method or entry point">
-    <button class="primary" id="runAsk">Ask</button>`;
-  openPanel(`Ask the graph of ${branch}`, tools, '');
-  const go = async () => {
-    $('#panelText').textContent = 'Working…';
-    try {
-      const r = await api(`/api/ask/${gid}?kind=${$('#kind').value}&ref=${encodeURIComponent($('#ref').value)}`);
-      $('#panelText').textContent = r.text;
-    } catch (e) { $('#panelText').textContent = e.message; }
-  };
-  $('#runAsk').onclick = go;
-  $('#ref').onkeydown = e => { if (e.key === 'Enter') go(); };
-}
-
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-build],[data-del],[data-diff],[data-ask],[data-log]');
+  const t = ev.target.closest('[data-build],[data-del],[data-diff],[data-log],[data-more]');
   if (!t) return;
   ev.preventDefault();
   try {
     if (t.dataset.build) {
       t.disabled = true;
-      const {job} = await api('/api/build', {gid: t.dataset.build});
+      const {job} = await api('/api/build', {project: t.dataset.project, ref: t.dataset.build});
       await refresh();
       poll(job);
     } else if (t.dataset.del) {
-      if (confirm('Remove this project from the list? Its graphs stay on disk.')) { await api(`/api/projects/${t.dataset.del}/delete`, {}); refresh(); }
+      if (confirm('Remove this project from the list? Its graphs and diagrams stay on disk.')) { await api(`/api/projects/${t.dataset.del}/delete`, {}); refresh(); }
     } else if (t.dataset.diff) {
-      showDiff(t.dataset.diff, t.dataset.branch, 'HEAD');
-    } else if (t.dataset.ask) {
-      showAsk(t.dataset.ask, t.dataset.branch);
+      showDiff(t.dataset.project, t.dataset.diff, t.dataset.label, t.dataset.diff === 'wc' ? 'HEAD' : (ui.base || 'origin/preprod'));
     } else if (t.dataset.log) {
       const job = await api('/api/jobs/' + t.dataset.log);
       openPanel('Build log', '', job.log.join('\n'));
+    } else if (t.dataset.more) {
+      ui[t.dataset.more].limit += 25; saveUi(); render();
     }
   } catch (e) { alert(e.message); refresh(); }
 });
-
+document.addEventListener('input', ev => {
+  const f = ev.target.dataset && ev.target.dataset.filter;
+  if (f) { ui[f].filter = ev.target.value; ui[f].limit = 25; saveUi(); render(); }
+});
+document.addEventListener('change', ev => {
+  const r = ev.target.dataset && ev.target.dataset.remote;
+  if (r) { ui[r].remote = ev.target.checked; saveUi(); render(); }
+});
 $('#panelClose').onclick = closePanel;
 $('#panel').addEventListener('click', e => { if (e.target.id === 'panel') closePanel(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
@@ -284,12 +315,7 @@ $('#addForm').onsubmit = async e => {
     refresh();
   } catch (err) { $('#addMsg').textContent = err.message; }
 };
-
-refresh().then(() => {
-  for (const p of state.projects) for (const w of p.worktrees)
-    if (w.job && ['queued', 'running'].includes(w.job.state)) poll(w.job.id);
-});
-setInterval(() => { if (!$('#panel').classList.contains('open') && !$('#addForm').classList.contains('open')) refresh(); }, 15000);
+refresh();
 </script>
 </body>
 </html>

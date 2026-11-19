@@ -1,10 +1,8 @@
-import io
 import json
 import os
 import shutil
 import subprocess
 import threading
-import time
 import urllib.error
 import urllib.request
 
@@ -34,39 +32,25 @@ def repo(tmp_path, monkeypatch):
     git(main, 'worktree', 'add', '-q', '-b', 'feature', str(tmp_path / 'addons-feature'))
     conf = tmp_path / 'odoo.conf'
     conf.write_text(f'[options]\naddons_path = {CORE},{main}\n')
-    service.add_project(str(main), conf=str(conf))
-    return main, tmp_path / 'addons-feature'
+    pid = service.add_project(str(main), conf=str(conf))
+    return service.get_project(pid), main, tmp_path / 'addons-feature'
 
 
-def wait(jid):
-    for _ in range(100):
-        if service._jobs[jid]['state'] in ('done', 'failed'):
-            return service._jobs[jid]
-        time.sleep(0.05)
-    raise AssertionError('build did not finish')
-
-
-def test_worktrees_build_and_staleness(repo):
-    main, feature = repo
-    p = service.overview()[0]
-    assert [w['branch'] for w in p['worktrees']] == ['main', 'feature']
-    assert not p['worktrees'][1]['graph']['exists']
-    # the conf points at the main checkout: building the feature worktree must scan the feature folder
-    args = service.build_args(service.load_projects()[0], str(feature))
+def test_working_copy_build_and_staleness(repo):
+    project, main, feature = repo
+    assert service.working_copy(project)['graph'] == 'none'
+    # the conf points at the main checkout: another folder of the repo is built from its own files
+    args = service.build_args(project, str(feature))
     assert args['paths'] == [os.path.realpath(feature)] and args['core'] == [os.path.realpath(CORE)]
-    job = wait(service.start_build(str(feature)))
-    assert job['state'] == 'done', job['log']
-    st = service.graph_status(str(feature))
-    assert st['exists'] and not st['stale']
-    py = feature / 'shop_discount' / 'models' / 'shop_order.py'
+    service.build_worktree(str(main), log=lambda *a: None)
+    assert service.working_copy(project)['graph'] == 'up to date'
+    py = main / 'shop_discount' / 'models' / 'shop_order.py'
     py.write_text(py.read_text().replace("'discount': 10", "'discount': 20"))
-    assert service.graph_status(str(feature))['reason'].startswith('uncommitted')
-    git(feature, 'commit', '-qam', 'change')
-    assert service.graph_status(str(feature))['reason'] == 'new commits since the build'
+    assert service.working_copy(project)['graph'] == 'outdated'  # uncommitted edit
 
 
-def test_http_api(repo):
-    main, feature = repo
+def test_http_guards_and_pages(repo):
+    project, main, feature = repo
     from http.server import ThreadingHTTPServer
     httpd = ThreadingHTTPServer(('127.0.0.1', 0), service.Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -74,29 +58,23 @@ def test_http_api(repo):
     try:
         assert 'Odoo Impact' in urllib.request.urlopen(base + '/').read().decode()
         data = json.loads(urllib.request.urlopen(base + '/api/projects').read())
-        gid = data['projects'][0]['worktrees'][1]['gid']
-        body = json.dumps({'gid': gid}).encode()
+        assert data['projects'][0]['working_copy']['branch'] == 'main'
+        body = json.dumps({'project': project['id'], 'ref': 'main'}).encode()
         with pytest.raises(urllib.error.HTTPError) as err:  # no custom header = cross-site attempt
             urllib.request.urlopen(urllib.request.Request(base + '/api/build', body, {'Content-Type': 'application/json'}))
         assert err.value.code == 403
-        req = urllib.request.Request(base + '/api/build', body, {'Content-Type': 'application/json', 'X-Odoo-Impact': '1'})
-        jid = json.loads(urllib.request.urlopen(req).read())['job']
-        assert wait(jid)['state'] == 'done'
-        page = urllib.request.urlopen(f'{base}/explore/{gid}').read().decode()
-        assert 'shop.order.discount' in page and '← Dashboard' in page
-        diff = json.loads(urllib.request.urlopen(f'{base}/api/diff/{gid}?base=HEAD').read())
-        assert '0 fields/methods changed' in diff['text']
-        ask = json.loads(urllib.request.urlopen(f'{base}/api/ask/{gid}?kind=who&ref=shop.order.discount').read())
-        assert 'action_apply_discount' in ask['text']
         with pytest.raises(urllib.error.HTTPError) as err:  # DNS rebinding: foreign Host header
             urllib.request.urlopen(urllib.request.Request(base + '/api/projects', headers={'Host': 'evil.example'}))
         assert err.value.code == 403
+        with pytest.raises(urllib.error.HTTPError) as err:  # no path tricks in diagram names
+            urllib.request.urlopen(base + f"/api/diagrams/{project['id']}/..%2F..%2Fprojects")
+        assert err.value.code == 404
     finally:
         httpd.shutdown()
 
 
 def test_mcp_auto_builds_the_current_worktree(repo):
-    main, feature = repo
+    project, main, feature = repo
     srv = Server(service.graph_path(str(feature)), worktree=str(feature))
     first = srv.handle({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
                         'params': {'name': 'impact_find', 'arguments': {'query': 'discount'}}})

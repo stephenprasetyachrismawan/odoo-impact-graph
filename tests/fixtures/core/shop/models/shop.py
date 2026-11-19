@@ -1,12 +1,14 @@
 from odoo import api, fields, models
 
+ORDER_STATE = [('draft', 'Draft'), ('done', 'Done')]
+
 
 class ShopOrder(models.Model):
     _name = 'shop.order'
     _description = 'Shop Order'
 
     name = fields.Char('Reference')
-    state = fields.Selection([('draft', 'Draft'), ('done', 'Done')], default='draft')
+    state = fields.Selection(ORDER_STATE, default='draft')
     line_ids = fields.One2many('shop.order.line', 'order_id', string='Lines')
     amount_total = fields.Float(compute='_compute_amount_total', store=True)
     partner_city = fields.Char(related='partner_id.city')
@@ -18,7 +20,10 @@ class ShopOrder(models.Model):
             order.amount_total = sum(order.line_ids.mapped('subtotal'))
 
     def action_confirm(self):
-        self.write({'state': 'done'})
+        self.write(self._prepare_confirm_values())
+
+    def _prepare_confirm_values(self):
+        return {'state': 'done'}
 
 
 class ShopOrderLine(models.Model):

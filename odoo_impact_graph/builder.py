@@ -152,7 +152,7 @@ class _Builder:
                     if fid:
                         self.edge(vid, fid, 'shows', label=label)
                 else:
-                    _, model, name, btype, action_xmlid, label = item
+                    _, model, name, btype, action_xmlid, label = item[:6]
                     if btype == 'action' and action_xmlid:
                         name = action_xmlid  # instead of the raw %(xmlid)d / database id
                     bid = self.node(f'button:{v["id"]}:{model}:{name}', lvl=3, type='button', model=model,
@@ -251,4 +251,5 @@ def build_graph(facts, keep_all=False):
         },
         'nodes': sorted(nodes.values(), key=lambda n: n['id']),
         'edges': edges,
+        'catalog': facts.get('catalog'),
     }

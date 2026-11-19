@@ -5,8 +5,9 @@ description: Answers "what does this Odoo change touch" from the project's impac
 
 # Odoo impact analysis
 
-With the service, the MCP server (`odoo-impact mcp --auto`) answers from the graph of the git worktree
-the session runs in, and the dashboard http://127.0.0.1:8770/ shows every worktree. Without it, the graph
+With the service, the MCP server (`odoo-impact mcp --auto`) answers from the graph of the folder the
+session runs in, and the dashboard http://127.0.0.1:8770/ builds any branch and draws it as an interactive
+class / use case / activity diagram (skill `odoo-impact-web`). Without it, the graph
 is `<project>/.odoo-impact/graph.json` (or the `-g` given to the MCP server).
 `impact_*` tools say "No impact graph yet" → call `impact_rebuild` once. No `odoo-impact` command, or the
 worktree's repository is not registered → run the `odoo-impact-setup` skill first.
