@@ -155,3 +155,46 @@ def test_html_and_mcp(tmp_path, graph):
     assert replies[3]['result']['isError'] is False
     assert 'shop.order.amount_net' in replies[3]['result']['content'][0]['text']
     assert replies[4]['result']['isError'] is True
+
+
+def test_from_conf_rebuild_and_mcp_rebuild(tmp_path):
+    import sys
+    from odoo_impact_graph import cli
+    conf = tmp_path / 'odoo.conf'
+    conf.write_text(f'[options]\naddons_path = {CORE}, {CUSTOM}\n')
+    out = tmp_path / 'g' / 'graph.json'
+    # both folders come from the conf: mark custom explicitly since the fixture core has no odoo-bin
+    cli.main(['build', '--from-conf', str(conf), '--custom', CUSTOM, '-o', str(out), '--no-html'])
+    meta = json.loads(out.read_text())['meta']
+    assert meta['build']['paths'] == [CORE, CUSTOM]
+    assert meta['custom_modules'] == ['shop_discount']
+    before = out.stat().st_mtime_ns
+    cli.main(['rebuild', '-g', str(out), '--no-html'])
+    assert out.stat().st_mtime_ns >= before
+    reply = io.StringIO()
+    msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'impact_rebuild', 'arguments': {}}}
+    serve(str(out), io.StringIO(json.dumps(msg) + '\n'), reply)
+    result = json.loads(reply.getvalue())['result']
+    assert result['isError'] is False and 'graph:' in result['content'][0]['text']
+    assert reply.getvalue().count('\n') == 1  # build logs did not leak into the JSON-RPC stream
+
+
+def test_web_serves_the_explorer(tmp_path):
+    import sys
+    import time
+    import urllib.request
+    data = builder.build_graph(static_facts.build([CUSTOM], core_paths=[CORE], log=lambda *a: None))
+    gpath = tmp_path / 'graph.json'
+    gpath.write_text(json.dumps(data))
+    proc = subprocess.Popen([sys.executable, '-m', 'odoo_impact_graph.cli', 'web', '-g', str(gpath),
+                             '--port', '0', '--no-open'], stdout=subprocess.PIPE, text=True)
+    try:
+        line = proc.stdout.readline()
+        url = line.split()[3]
+        page = urllib.request.urlopen(url, timeout=5).read().decode()
+        assert 'Odoo Impact' in page and 'shop.order.discount' in page
+        with pytest.raises(Exception):
+            urllib.request.urlopen(url + 'graph.json', timeout=5)  # only the page is served
+    finally:
+        proc.terminate()
+        proc.wait(5)

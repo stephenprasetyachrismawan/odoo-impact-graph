@@ -15,7 +15,7 @@ L0 field -> L1 logic (compute, constraint, onchange, write/create hook, method) 
 -> L3 view/button/report -> L4 menu/action/cron.
 Before changing Odoo code: call impact_plan_change with every field and method you intend to touch,
 read which fields recompute, which hooks/constraints run, which code already writes those fields,
-and which screens must be tested. After editing, call impact_diff to check the real change.
+and which screens must be tested. After editing, call impact_rebuild then impact_diff to check the real change.
 Use impact_find to get exact ids (fields are 'model.field', methods 'model::method').
 Edges marked ~ were read from Python method bodies and are heuristic: open the file:line to confirm."""
 
@@ -48,6 +48,8 @@ TOOLS = [
          'depth': DEPTH, 'core_logic': CORE}, 'required': ['repo']}},
     {'name': 'impact_node', 'description': 'Details of one node (files, attributes) and its direct incoming/outgoing edges.',
      'inputSchema': {'type': 'object', 'properties': {'id': {'type': 'string'}}, 'required': ['id']}},
+    {'name': 'impact_rebuild', 'description': 'Rebuild the graph from the code (same folders / database as the first build). Call after editing code or switching branch, before impact_diff.',
+     'inputSchema': {'type': 'object', 'properties': {}}},
     {'name': 'impact_graph_info', 'description': 'Which code base / database the graph was built from, and its size.',
      'inputSchema': {'type': 'object', 'properties': {}}},
 ]
@@ -84,12 +86,22 @@ class Server:
             return query.report(g, 'diff', g.diff(a['repo'], a.get('base') or 'HEAD', depth, core))
         if name == 'impact_node':
             return query.node_text(g, a['id'])
+        if name == 'impact_rebuild':
+            import contextlib
+            import io
+            from .cli import rebuild
+            log = io.StringIO()
+            with contextlib.redirect_stdout(log):  # stdout is the JSON-RPC channel
+                rebuild(self.path)
+            self.graph = None
+            return log.getvalue().strip()
         if name == 'impact_graph_info':
             m = g.meta
             return json.dumps({
                 'graph': os.path.abspath(self.path), 'source': m.get('source'), 'db': m.get('db'),
                 'odoo_version': m.get('odoo_version'), 'custom_modules': m.get('custom_modules'),
-                'nodes': len(g.nodes), 'edges': len(g.edges),
+                'nodes': len(g.nodes), 'edges': len(g.edges), 'built_with': m.get('build'),
+                'built_at': os.path.getmtime(self.path),
             }, indent=1)
         raise KeyError(f'unknown tool {name}')
 
