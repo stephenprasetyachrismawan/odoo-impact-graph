@@ -5,8 +5,11 @@ description: Answers "what does this Odoo change touch" from the project's impac
 
 # Odoo impact analysis
 
-The graph lives at `<project>/.odoo-impact/graph.json` (or the `-g` given to the MCP server).
-No graph or no `odoo-impact` command → run the `odoo-impact-setup` skill first.
+With the service, the MCP server (`odoo-impact mcp --auto`) answers from the graph of the git worktree
+the session runs in, and the dashboard http://127.0.0.1:8770/ shows every worktree. Without it, the graph
+is `<project>/.odoo-impact/graph.json` (or the `-g` given to the MCP server).
+`impact_*` tools say "No impact graph yet" → call `impact_rebuild` once. No `odoo-impact` command, or the
+worktree's repository is not registered → run the `odoo-impact-setup` skill first.
 
 ## Levels and ids
 
@@ -33,7 +36,7 @@ Prefer the MCP tools when they are available; the CLI gives the same text.
 | What can change this field | `impact_who_changes` | `odoo-impact who <model.field>` |
 | What this menu / action / button / method can change | `impact_from_entry` | `odoo-impact from <id or label>` |
 | Before coding: everything a planned change touches | `impact_plan_change` | `odoo-impact plan <id> <id> ...` |
-| After coding: impact of the changed lines | `impact_rebuild` then `impact_diff` | `odoo-impact rebuild && odoo-impact diff <base>` |
+| After coding: impact of the changed lines | `impact_rebuild` then `impact_diff` | `odoo-impact rebuild && odoo-impact diff <base>`, or dashboard **Changes** |
 | One node, its files and direct edges | `impact_node` | `odoo-impact node <id>` |
 
 Defaults: depth 6, core (non-custom) methods hidden. Raise `depth` or set `core_logic` only when

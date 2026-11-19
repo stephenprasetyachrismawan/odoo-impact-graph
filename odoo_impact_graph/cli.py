@@ -26,19 +26,12 @@ def addons_path_from_conf(conf):
 
 
 def _save(graph, out, html, build=None):
-    if build:
-        graph['meta']['build'] = build  # lets `rebuild` and the MCP server redo the same build
-    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with open(out, 'w', encoding='utf-8') as fh:
-        json.dump(graph, fh, separators=(',', ':'))
-    print(f"graph: {len(graph['nodes'])} nodes, {len(graph['edges'])} edges -> {out}")
-    if html:
-        from .htmlexport import write_html
-        print('html:', write_html(out, os.path.splitext(out)[0] + '.html'))
+    from .buildrun import save
+    save(graph, out, html, build)
 
 
 def cmd_build(args):
-    from . import builder, static_facts
+    from .buildrun import build_static
     paths = list(args.paths or [])
     if getattr(args, 'from_conf', None):
         conf_paths = addons_path_from_conf(args.from_conf)
@@ -51,17 +44,10 @@ def cmd_build(args):
         if not answer:
             sys.exit('nothing to analyse')
         paths = [answer]
-    for p in paths + (args.core or []):
-        if not os.path.isdir(os.path.expanduser(p)):
-            sys.exit(f'not a folder: {p}')
-    wanted = [m.strip() for m in args.modules.split(',')] if args.modules else None
-    facts = static_facts.build(paths, args.core or [], args.custom or [], wanted)
-    if facts['unresolved_depends']:
-        print(f"{len(facts['unresolved_depends'])} @api.depends paths could not be resolved "
-              f"(module not scanned?), e.g. {facts['unresolved_depends'][0]}")
-    build = {'cmd': 'build', 'paths': _abs(paths), 'core': _abs(args.core), 'custom': _abs(args.custom),
-             'modules': args.modules, 'all': args.all}
-    _save(builder.build_graph(facts, keep_all=args.all), args.output, not args.no_html, build)
+    try:
+        build_static(paths, args.core, args.custom, args.modules, args.all, args.output, not args.no_html)
+    except ValueError as exc:
+        sys.exit(str(exc))
 
 
 def cmd_build_registry(args):
@@ -201,7 +187,79 @@ def cmd_html(args):
 
 def cmd_mcp(args):
     from .mcp_server import serve
-    serve(args.graph)
+    if args.auto:
+        from . import gitinfo, service
+        # outside git or an unregistered repo the server still starts; its tools explain what to do
+        top = gitinfo.toplevel(os.getcwd()) or os.getcwd()
+        serve(service.graph_path(top), worktree=top)
+    else:
+        serve(args.graph)
+
+
+def cmd_serve(args):
+    from . import service
+    service.serve(args.host, args.port, args.open)
+
+
+def cmd_project(args):
+    from . import service
+    if args.action == 'add':
+        try:
+            pid = service.add_project(args.repo, args.conf, args.core or [], args.modules, args.name)
+        except ValueError as exc:
+            sys.exit(str(exc))
+        print('project', pid, 'saved in', service.home('projects.json'))
+    elif args.action == 'list':
+        for p in service.overview():
+            print(f"{p['name']}  {p['repo']}")
+            for w in p['worktrees']:
+                g = w['graph']
+                st = 'no graph' if not g['exists'] else ('outdated: ' + g['reason'] if g['stale'] else 'up to date')
+                print(f"   {w['branch']:<50} {st}")
+    elif args.action == 'build':
+        from .service import build_worktree
+        from . import gitinfo
+        top = gitinfo.toplevel(args.repo) or args.repo
+        try:
+            build_worktree(top)
+        except ValueError as exc:
+            sys.exit(str(exc))
+
+
+SYSTEMD_UNIT = """[Unit]
+Description=odoo-impact service (impact graphs of Odoo worktrees)
+
+[Service]
+ExecStart={exe} serve --host 127.0.0.1 --port {port}
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def cmd_service(args):
+    """Install / remove a systemd --user unit running `odoo-impact serve`."""
+    import shutil
+    unit_dir = os.path.expanduser('~/.config/systemd/user')
+    unit = os.path.join(unit_dir, 'odoo-impact.service')
+    if args.action == 'install':
+        exe = shutil.which('odoo-impact') or os.path.join(os.path.dirname(sys.executable), 'odoo-impact')
+        os.makedirs(unit_dir, exist_ok=True)
+        with open(unit, 'w', encoding='utf-8') as fh:
+            fh.write(SYSTEMD_UNIT.format(exe=os.path.abspath(exe), port=args.port))
+        for cmd in (['daemon-reload'], ['enable', '--now', 'odoo-impact.service'], ['restart', 'odoo-impact.service']):
+            subprocess.run(['systemctl', '--user', *cmd], check=True)
+        print(f'installed {unit}\nrunning on http://127.0.0.1:{args.port}/  (systemctl --user status odoo-impact)')
+    elif args.action == 'uninstall':
+        subprocess.run(['systemctl', '--user', 'disable', '--now', 'odoo-impact.service'])
+        if os.path.exists(unit):
+            os.remove(unit)
+        subprocess.run(['systemctl', '--user', 'daemon-reload'])
+        print('removed', unit)
+    else:
+        subprocess.run(['systemctl', '--user', 'status', 'odoo-impact.service', '--no-pager'])
 
 
 def main(argv=None):
@@ -270,7 +328,29 @@ def main(argv=None):
 
     m = sub.add_parser('mcp', help='serve the graph to AI agents over MCP (stdio)')
     m.add_argument('-g', '--graph', default=DEFAULT_GRAPH)
+    m.add_argument('--auto', action='store_true',
+                   help='use the service graph of the git worktree of the current folder (see `serve`)')
     m.set_defaults(func=cmd_mcp)
+
+    sv = sub.add_parser('serve', help='local web service: projects, worktrees, Generate, explorer, changes')
+    sv.add_argument('--host', default='127.0.0.1')
+    sv.add_argument('--port', type=int, default=8770)
+    sv.add_argument('--open', action='store_true', help='open the browser')
+    sv.set_defaults(func=cmd_serve)
+
+    pj = sub.add_parser('project', help='manage the projects of the service without the browser')
+    pj.add_argument('action', choices=['add', 'list', 'build'])
+    pj.add_argument('repo', nargs='?', default='.', help='git repository / worktree folder')
+    pj.add_argument('--conf', help='odoo.conf whose addons_path gives the core folders')
+    pj.add_argument('--core', action='append', help='core folder (Odoo, Enterprise, OCA); repeatable')
+    pj.add_argument('--modules')
+    pj.add_argument('--name')
+    pj.set_defaults(func=cmd_project)
+
+    sy = sub.add_parser('service', help='run `serve` as a systemd --user service (Linux / WSL with systemd)')
+    sy.add_argument('action', choices=['install', 'uninstall', 'status'])
+    sy.add_argument('--port', type=int, default=8770)
+    sy.set_defaults(func=cmd_service)
 
     args = p.parse_args(argv)
     args.func(args)

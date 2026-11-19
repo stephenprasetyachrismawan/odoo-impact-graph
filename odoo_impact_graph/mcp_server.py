@@ -56,12 +56,16 @@ TOOLS = [
 
 
 class Server:
-    def __init__(self, graph_path):
+    def __init__(self, graph_path, worktree=None):
         self.path = graph_path
+        self.worktree = worktree  # --auto: graph of this git worktree, built by the service storage
         self.graph = None
         self.mtime = None
 
     def g(self):
+        if not os.path.exists(self.path):
+            raise KeyError(f'No impact graph yet for {self.worktree or self.path}: call impact_rebuild '
+                           f'(or press Generate in `odoo-impact serve`).')
         mtime = os.path.getmtime(self.path)  # reload when the graph is rebuilt
         if self.graph is None or mtime != self.mtime:
             self.graph = query.Graph.load(self.path)
@@ -69,6 +73,8 @@ class Server:
         return self.graph
 
     def call(self, name, a):
+        if name == 'impact_rebuild':
+            return self.rebuild()
         g = self.g()
         depth, core = int(a.get('depth', 6)), bool(a.get('core_logic', False))
         if name == 'impact_find':
@@ -86,24 +92,31 @@ class Server:
             return query.report(g, 'diff', g.diff(a['repo'], a.get('base') or 'HEAD', depth, core))
         if name == 'impact_node':
             return query.node_text(g, a['id'])
-        if name == 'impact_rebuild':
-            import contextlib
-            import io
-            from .cli import rebuild
-            log = io.StringIO()
-            with contextlib.redirect_stdout(log):  # stdout is the JSON-RPC channel
-                rebuild(self.path)
-            self.graph = None
-            return log.getvalue().strip()
         if name == 'impact_graph_info':
             m = g.meta
+            from . import gitinfo
             return json.dumps({
                 'graph': os.path.abspath(self.path), 'source': m.get('source'), 'db': m.get('db'),
                 'odoo_version': m.get('odoo_version'), 'custom_modules': m.get('custom_modules'),
                 'nodes': len(g.nodes), 'edges': len(g.edges), 'built_with': m.get('build'),
-                'built_at': os.path.getmtime(self.path),
+                'built_at': m.get('built_at'), 'built_git': m.get('git'),
+                'worktree_now': gitinfo.state(self.worktree or (m.get('build') or {}).get('paths', ['.'])[0]),
             }, indent=1)
         raise KeyError(f'unknown tool {name}')
+
+    def rebuild(self):
+        import contextlib
+        import io
+        log = io.StringIO()
+        with contextlib.redirect_stdout(log):  # stdout is the JSON-RPC channel
+            if self.worktree and not os.path.exists(self.path):
+                from .service import build_worktree
+                build_worktree(self.worktree)
+            else:
+                from .cli import rebuild
+                rebuild(self.path, html=False)
+        self.graph = None
+        return log.getvalue().strip()
 
     def handle(self, msg):
         method, mid = msg.get('method'), msg.get('id')
@@ -133,12 +146,12 @@ class Server:
         return {'jsonrpc': '2.0', 'id': mid, 'result': result}
 
 
-def serve(graph_path, stdin=None, stdout=None):
+def serve(graph_path, stdin=None, stdout=None, worktree=None):
     stdin, stdout = stdin or sys.stdin, stdout or sys.stdout
-    if not os.path.exists(graph_path):
+    if not worktree and not os.path.exists(graph_path):
         print(f'odoo-impact mcp: {graph_path} not found, run `odoo-impact build` first', file=sys.stderr)
         sys.exit(1)
-    server = Server(graph_path)
+    server = Server(graph_path, worktree)
     for line in stdin:
         line = line.strip()
         if not line:

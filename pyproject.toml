@@ -22,4 +22,4 @@ odoo-impact = "odoo_impact_graph.cli:main"
 packages = ["odoo_impact_graph"]
 
 [tool.setuptools.package-data]
-odoo_impact_graph = ["explorer.html"]
+odoo_impact_graph = ["explorer.html", "dashboard.html"]

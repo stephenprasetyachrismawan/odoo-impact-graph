@@ -12,6 +12,8 @@ Know what a change in an Odoo code base will touch **before** you make it, and l
 | L1 | compute methods, constraints, onchanges, `write` / `create` / `copy` / `unlink` overrides, other methods |
 | L0 | fields |
 
+It runs as a **local web service**. The dashboard lists every git worktree of your project; press **Generate** on a worktree to build its graph, then open it, ask it questions, or see what the branch changes.
+
 It answers these questions:
 - **If this field or method changes:** which fields recompute, which constraints, onchanges and hooks run, and on which views, actions and menus the user sees it.
 - **Who changes this field:** which methods write it, and which buttons, menus and crons lead there.
@@ -178,7 +180,46 @@ A label works too, for example `"Sales/Orders/Quotations"`.
 | (none) | the running registry, or declarations (fields, `@api.*`, views, actions, menus) | exact / reliable |
 | `~` | method bodies: `'x' in vals`, `vals.get('x')`, `.write({...})`, `self.env['m'].create({...})`, `rec.x = ...`, calls, `res_model` / `env.ref` | heuristic; check the `file:line` |
 
-## 4. See it in the browser (web view)
+## 4. Web service: dashboard with one-click Generate per worktree
+
+Run it once as a service. It stays on **http://127.0.0.1:8770/**.
+
+```bash
+odoo-impact service install        # systemd --user unit, starts now and at login (Linux, WSL with systemd)
+odoo-impact service status
+# or in a terminal, without systemd:
+odoo-impact serve --open
+```
+
+In the dashboard:
+
+1. **Add project.** Give the git repository of your custom addons and its `odoo.conf`, or the Odoo / Enterprise folders. In the conf, folders inside the repository are swapped for the worktree being built; the other folders are core.
+2. **See every git worktree of the repository**, with its branch, last commit and graph state:
+
+   | State | Meaning |
+   |---|---|
+   | no graph | never generated |
+   | up to date | matches the current commit |
+   | outdated | new commits, or uncommitted changes, since the last build |
+
+3. **Generate / Regenerate** builds the graph of that worktree in the background, in about 5–10 s for ~200 modules.
+4. **Open** shows the explorer of that worktree.
+5. **Changes** lists what the worktree's commits and uncommitted edits touch, compared with `HEAD` or any branch (`origin/main`, `preprod`…), and the screens to retest.
+6. **Ask** answers if it changes / who changes it / from here, as text.
+
+Without a browser:
+
+```bash
+odoo-impact project add /path/to/repo --conf /path/to/odoo.conf   # register
+odoo-impact project list                                          # worktrees and graph state
+odoo-impact project build /path/to/a/worktree                     # generate one
+```
+
+Service data lives in `~/.local/share/odoo-impact` (`ODOO_IMPACT_HOME`): `projects.json`, plus one `graphs/<id>/graph.json` per worktree.
+
+The service listens on 127.0.0.1 only. It refuses foreign `Host` headers (DNS rebinding), and it only starts builds on requests that carry its own header, which a web page on another site cannot send. To reach it from another machine, use an SSH tunnel; don't expose it.
+
+## 5. One graph without the service (web view)
 
 ```bash
 odoo-impact web
@@ -212,32 +253,37 @@ http://127.0.0.1:8765/#who|sale.order.line.price_unit
 http://127.0.0.1:8765/#from|menu:sale.menu_sale_quotations
 ```
 
-## 5. Connect your AI coding agent (MCP)
+## 6. Connect your AI coding agent (MCP)
+
+This is a stdio MCP server with no dependencies. It reloads the graph whenever it is rebuilt. There are two ways to run it:
 
 ```bash
-odoo-impact mcp -g /abs/project/.odoo-impact/graph.json
+odoo-impact mcp --auto                                   # with the service: the graph of the worktree the agent runs in
+odoo-impact mcp -g /abs/project/.odoo-impact/graph.json  # one fixed graph file
 ```
 
-This is a stdio MCP server with no dependencies. It reloads the graph whenever it is rebuilt.
+**`--auto` is the recommended mode.** It needs the project to be registered in the service. Each agent session then gets the graph of its own worktree, so one registration covers every branch. If the worktree has no graph yet, the `impact_rebuild` tool builds it.
 
 **Register it:**
 
 ```bash
-# Claude Code (private to the current project)
-claude mcp add odoo-impact -s local -- odoo-impact mcp -g "$PWD/.odoo-impact/graph.json"
+# Claude Code, once for all projects
+claude mcp add odoo-impact -s user -- odoo-impact mcp --auto
 claude mcp get odoo-impact      # Status: ✔ Connected
+# or one fixed graph, private to the current project
+claude mcp add odoo-impact -s local -- odoo-impact mcp -g "$PWD/.odoo-impact/graph.json"
 ```
 
 ```toml
 # Codex: ~/.codex/config.toml
 [mcp_servers.odoo-impact]
 command = "odoo-impact"
-args = ["mcp", "-g", "/abs/project/.odoo-impact/graph.json"]
+args = ["mcp", "--auto"]          # or ["mcp", "-g", "/abs/project/.odoo-impact/graph.json"]
 ```
 
 ```json
 // Cursor, Claude Desktop and other "mcpServers" clients
-{"mcpServers": {"odoo-impact": {"command": "odoo-impact", "args": ["mcp", "-g", "/abs/project/.odoo-impact/graph.json"]}}}
+{"mcpServers": {"odoo-impact": {"command": "odoo-impact", "args": ["mcp", "--auto"]}}}
 ```
 
 If the agent does not see `odoo-impact` on its PATH, use the absolute path from `which odoo-impact`. The tools appear in the next agent session.
@@ -254,7 +300,7 @@ If the agent does not see `odoo-impact` on its PATH, use the absolute path from 
 | `impact_node` | one node, its files and direct edges |
 | `impact_graph_info` | what the graph was built from, and when |
 
-## 6. Install the agent skills
+## 7. Install the agent skills
 
 The [`.agents/skills`](.agents/skills) folder holds four skills, in the common `SKILL.md` format used by Claude Code, Codex and other agents:
 
@@ -295,13 +341,15 @@ Restart the agent afterwards. Then ask it to *"set up odoo-impact for this proje
 
 ```bash
 pipx install git+https://github.com/stephenprasetyachrismawan/odoo-impact-graph.git
-cd /path/to/your/odoo/project
-odoo-impact build --from-conf /path/to/odoo.conf
-echo '.odoo-impact/' >> .git/info/exclude
-odoo-impact field your.model.your_field
-odoo-impact web
-claude mcp add odoo-impact -s local -- odoo-impact mcp -g "$PWD/.odoo-impact/graph.json"
+odoo-impact service install                                            # dashboard on http://127.0.0.1:8770/
+odoo-impact project add /path/to/custom-addons-repo --conf /path/to/odoo.conf
+odoo-impact project build /path/to/custom-addons-repo                  # or press Generate in the dashboard
+claude mcp add odoo-impact -s user -- odoo-impact mcp --auto           # the agent sees the graph of its worktree
+git clone https://github.com/stephenprasetyachrismawan/odoo-impact-graph.git ~/src/odoo-impact-graph
+~/src/odoo-impact-graph/scripts/install-skills.sh                      # skills for the agent
 ```
+
+Without the service, a single project folder works too: `odoo-impact build --from-conf odoo.conf`, `odoo-impact web`.
 
 ## Limits
 

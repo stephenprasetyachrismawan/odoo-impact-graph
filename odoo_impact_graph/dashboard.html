@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Odoo Impact Service</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #66655f; --line: #d9d6cf; --soft: #faf9f6;
+  --ok: #2e7d4f; --warn: #a2621b; --bad: #9c2f4a; --accent: #2f6f9f; --focus: #1d1d1b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a09f99; --line: #3a3936; --soft: #262624;
+    --ok: #6ccf95; --warn: #e0a35a; --bad: #ec7f98; --accent: #6fb0e0; --focus: #ecebe6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a09f99; --line: #3a3936; --soft: #262624;
+  --ok: #6ccf95; --warn: #e0a35a; --bad: #ec7f98; --accent: #6fb0e0; --focus: #ecebe6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 17px; margin: 0; }
+header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px; }
+button, .btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); border-radius: 6px; padding: 6px 10px; cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap; }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+input, textarea, select { font: inherit; font-size: 13px; width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+textarea { min-height: 64px; font-family: ui-monospace, monospace; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 16px; }
+.card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.card-head h2 { font-size: 15px; margin: 0; }
+.card-head small { color: var(--muted); word-break: break-all; }
+.form { padding: 4px 14px 14px; display: none; }
+.form.open { display: block; }
+.card:has(> .form:not(.open)) { display: none; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 14px; border-top: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; border-top: 0; }
+td.path { word-break: break-all; color: var(--muted); font-size: 12px; }
+td .branch { font-weight: 600; color: var(--ink); font-size: 13px; }
+.badge { display: inline-block; white-space: nowrap; font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid currentColor; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.panel { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 30; }
+.panel.open { display: flex; }
+.panel > div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; width: min(1000px, 100%); max-height: 90vh; display: flex; flex-direction: column; }
+.panel header { position: static; border-radius: 8px 8px 0 0; }
+.panel pre { margin: 0; padding: 14px; overflow: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+.toolbar input, .toolbar select { width: auto; flex: 1 1 200px; }
+.empty { color: var(--muted); padding: 20px 14px; }
+code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--soft); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+.hint { color: var(--muted); font-size: 13px; }
+@media (max-width: 760px) {
+  .grid2 { grid-template-columns: 1fr; }
+  thead { display: none; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tr { border-top: 1px solid var(--line); padding: 6px 0; }
+  td { border: 0; padding: 4px 14px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Odoo Impact</h1>
+    <p>Generate the impact graph of any worktree, open it, see what a branch touches.</p>
+  </div>
+  <button class="primary" id="addToggle" aria-expanded="false" aria-controls="addForm">Add project</button>
+</header>
+<main>
+  <section class="card">
+    <form class="form" id="addForm">
+      <div class="grid2">
+        <div>
+          <label for="repo">Git repository with your custom addons (any worktree of it)</label>
+          <input id="repo" required placeholder="/home/me/projects/odoo/custom/my-addons">
+        </div>
+        <div>
+          <label for="name">Name (optional)</label>
+          <input id="name" placeholder="my-addons">
+        </div>
+        <div>
+          <label for="conf">odoo.conf (optional, its addons_path gives the Odoo / Enterprise folders)</label>
+          <input id="conf" placeholder="/home/me/projects/odoo/conf/odoo.conf">
+        </div>
+        <div>
+          <label for="modules">Modules to treat as installed (optional, comma-separated)</label>
+          <input id="modules" placeholder="leave empty: all custom modules + dependencies">
+        </div>
+      </div>
+      <label for="core">Core folders, one per line (Odoo source, Enterprise, OCA) when there is no odoo.conf</label>
+      <textarea id="core" placeholder="/home/me/projects/odoo/odoo17&#10;/home/me/projects/odoo/enterprise"></textarea>
+      <p class="hint" id="addMsg" role="status"></p>
+      <button class="primary" type="submit">Save project</button>
+    </form>
+  </section>
+  <div id="projects"><p class="empty">Loading…</p></div>
+  <p class="hint">AI agents: <code>odoo-impact mcp --auto</code> serves the graph of the worktree the agent runs in
+    (Claude Code: <code>claude mcp add odoo-impact -s user -- odoo-impact mcp --auto</code>).</p>
+</main>
+
+<div class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
+  <div>
+    <header><h1 id="panelTitle">Result</h1><button id="panelClose">Close</button></header>
+    <div class="toolbar" id="panelTools"></div>
+    <pre id="panelText"></pre>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = async (path, body) => {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: 'POST', headers: {'Content-Type': 'application/json', 'X-Odoo-Impact': '1'}, body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+};
+const ago = t => {
+  if (!t) return '';
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 90) return 'just now';
+  if (s < 5400) return Math.round(s / 60) + ' min ago';
+  if (s < 129600) return Math.round(s / 3600) + ' h ago';
+  return Math.round(s / 86400) + ' days ago';
+};
+
+let state = {projects: []};
+const polling = new Set();
+
+function status(w) {
+  if (w.job && (w.job.state === 'running' || w.job.state === 'queued')) return `<span class="badge warn">${w.job.state}…</span>`;
+  if (w.job && w.job.state === 'failed') return `<span class="badge bad">failed</span> <a href="#" data-log="${w.job.id}">log</a>`;
+  const g = w.graph;
+  if (!g.exists) return '<span class="badge muted">no graph</span>';
+  const built = `<div class="sub">built ${ago(g.built_at)} at ${esc(g.built_head)}</div>`;
+  return g.stale ? `<span class="badge warn">outdated</span><div class="sub">${esc(g.reason)}</div>${built}`
+                 : `<span class="badge ok">up to date</span>${built}`;
+}
+
+function render() {
+  const root = $('#projects');
+  if (!state.projects.length) {
+    root.innerHTML = '<section class="card"><p class="empty">No project yet. Press <b>Add project</b>, give the git repository of your custom addons and its odoo.conf (or the Odoo / Enterprise folders).</p></section>';
+    return;
+  }
+  root.innerHTML = state.projects.map(p => `
+    <section class="card">
+      <div class="card-head">
+        <div><h2>${esc(p.name)}</h2><small>${esc(p.repo)}${p.conf ? ' · conf ' + esc(p.conf) : ''}${p.core.length ? ' · core ' + esc(p.core.join(', ')) : ''}</small></div>
+        <button data-del="${p.id}" aria-label="Remove project ${esc(p.name)}">Remove</button>
+      </div>
+      <table>
+        <thead><tr><th>Worktree</th><th>Last commit</th><th>Graph</th><th>Actions</th></tr></thead>
+        <tbody>${p.worktrees.map(w => `
+          <tr>
+            <td><div class="branch">${esc(w.branch)}</div><div class="sub" style="word-break:break-all">${esc(w.path)}</div></td>
+            <td><code>${esc(w.head)}</code> ${esc(w.subject).slice(0, 110)}${w.dirty ? ' <span class="badge warn">uncommitted</span>' : ''}</td>
+            <td>${status(w)}</td>
+            <td><div class="actions">
+              <button data-build="${w.gid}" ${w.job && ['running','queued'].includes(w.job.state) ? 'disabled' : ''}>${w.graph.exists ? 'Regenerate' : 'Generate'}</button>
+              ${w.graph.exists ? `<a class="btn" href="/explore/${w.gid}" target="_blank" rel="noopener">Open</a>
+              <button data-diff="${w.gid}" data-branch="${esc(w.branch)}">Changes</button>
+              <button data-ask="${w.gid}" data-branch="${esc(w.branch)}">Ask</button>` : ''}
+            </div></td>
+          </tr>`).join('') || '<tr><td colspan="4" class="empty">No worktree found.</td></tr>'}
+        </tbody>
+      </table>
+    </section>`).join('');
+}
+
+async function refresh() {
+  try { state = await api('/api/projects'); render(); }
+  catch (e) { $('#projects').innerHTML = `<p class="empty bad">${esc(e.message)}</p>`; }
+}
+
+async function poll(jid) {
+  if (polling.has(jid)) return;
+  polling.add(jid);
+  for (;;) {
+    await new Promise(r => setTimeout(r, 1000));
+    const job = await api('/api/jobs/' + jid).catch(() => null);
+    if (!job || !['queued', 'running'].includes(job.state)) break;
+  }
+  polling.delete(jid);
+  refresh();
+}
+
+function openPanel(title, tools, text) {
+  $('#panelTitle').textContent = title;
+  $('#panelTools').innerHTML = tools;
+  $('#panelText').textContent = text;
+  $('#panel').classList.add('open');
+  ($('#panelTools input') || $('#panelClose')).focus();
+}
+function closePanel() { $('#panel').classList.remove('open'); }
+
+async function showDiff(gid, branch, base) {
+  const tools = `<label for="base" style="margin:0">Compare with</label>
+    <input id="base" value="${esc(base)}" placeholder="HEAD = uncommitted, or origin/preprod, master…">
+    <button class="primary" id="runDiff">Show</button>`;
+  openPanel(`Changes in ${branch}`, tools, 'Working…');
+  $('#runDiff').onclick = () => showDiff(gid, branch, $('#base').value || 'HEAD');
+  $('#base').onkeydown = e => { if (e.key === 'Enter') $('#runDiff').click(); };
+  try {
+    const r = await api(`/api/diff/${gid}?base=${encodeURIComponent(base)}`);
+    $('#panelText').textContent = r.text;
+  } catch (e) { $('#panelText').textContent = e.message; }
+}
+
+function showAsk(gid, branch) {
+  const tools = `<select id="kind" aria-label="Question">
+      <option value="impact">If it changes →</option><option value="who">← Who changes it</option><option value="reach">From here ↓</option>
+    </select>
+    <input id="ref" placeholder="sale.order.amount_total, sale.order::action_confirm, a menu label…" aria-label="Field, method or entry point">
+    <button class="primary" id="runAsk">Ask</button>`;
+  openPanel(`Ask the graph of ${branch}`, tools, '');
+  const go = async () => {
+    $('#panelText').textContent = 'Working…';
+    try {
+      const r = await api(`/api/ask/${gid}?kind=${$('#kind').value}&ref=${encodeURIComponent($('#ref').value)}`);
+      $('#panelText').textContent = r.text;
+    } catch (e) { $('#panelText').textContent = e.message; }
+  };
+  $('#runAsk').onclick = go;
+  $('#ref').onkeydown = e => { if (e.key === 'Enter') go(); };
+}
+
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-build],[data-del],[data-diff],[data-ask],[data-log]');
+  if (!t) return;
+  ev.preventDefault();
+  try {
+    if (t.dataset.build) {
+      t.disabled = true;
+      const {job} = await api('/api/build', {gid: t.dataset.build});
+      await refresh();
+      poll(job);
+    } else if (t.dataset.del) {
+      if (confirm('Remove this project from the list? Its graphs stay on disk.')) { await api(`/api/projects/${t.dataset.del}/delete`, {}); refresh(); }
+    } else if (t.dataset.diff) {
+      showDiff(t.dataset.diff, t.dataset.branch, 'HEAD');
+    } else if (t.dataset.ask) {
+      showAsk(t.dataset.ask, t.dataset.branch);
+    } else if (t.dataset.log) {
+      const job = await api('/api/jobs/' + t.dataset.log);
+      openPanel('Build log', '', job.log.join('\n'));
+    }
+  } catch (e) { alert(e.message); refresh(); }
+});
+
+$('#panelClose').onclick = closePanel;
+$('#panel').addEventListener('click', e => { if (e.target.id === 'panel') closePanel(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+$('#addToggle').onclick = () => {
+  const open = $('#addForm').classList.toggle('open');
+  $('#addToggle').setAttribute('aria-expanded', String(open));
+  if (open) $('#repo').focus();
+};
+$('#addForm').onsubmit = async e => {
+  e.preventDefault();
+  $('#addMsg').textContent = 'Saving…';
+  try {
+    await api('/api/projects', {
+      repo: $('#repo').value.trim(), name: $('#name').value.trim(), conf: $('#conf').value.trim(),
+      modules: $('#modules').value.trim(), core: $('#core').value.split('\n').map(s => s.trim()).filter(Boolean),
+    });
+    $('#addMsg').textContent = '';
+    $('#addForm').reset();
+    $('#addForm').classList.remove('open');
+    $('#addToggle').setAttribute('aria-expanded', 'false');
+    refresh();
+  } catch (err) { $('#addMsg').textContent = err.message; }
+};
+
+refresh().then(() => {
+  for (const p of state.projects) for (const w of p.worktrees)
+    if (w.job && ['queued', 'running'].includes(w.job.state)) poll(w.job.id);
+});
+setInterval(() => { if (!$('#panel').classList.contains('open') && !$('#addForm').classList.contains('open')) refresh(); }, 15000);
+</script>
+</body>
+</html>

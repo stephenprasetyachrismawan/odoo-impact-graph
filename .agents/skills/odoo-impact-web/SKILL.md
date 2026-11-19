@@ -1,13 +1,31 @@
 ---
 name: odoo-impact-web
-description: Opens the odoo-impact web explorer - the interactive page that shows an Odoo impact graph as five lanes (menu/action, view/button, model, logic, field) with highlighted paths - in the browser, served from localhost, and explains how to read it. Use when the user wants to see, show, open or browse the impact graph visually ("lihat web impact graph", "buka explorer", "tampilkan graf dampak"), or wants a link or screenshot of the impact of a field, method, button or menu.
+description: Opens the odoo-impact web service and explorer - the localhost dashboard (http://127.0.0.1:8770/) that lists every git worktree of an Odoo project with a Generate button, graph state, Changes vs a branch and Ask, and the interactive explorer that shows a graph as five lanes (menu/action, view/button, model, logic, field) with highlighted paths - and explains how to read them. Use when the user wants to see, show, open or browse the impact graph visually ("lihat web impact graph", "buka explorer", "tampilkan graf dampak"), or wants a link or screenshot of the impact of a field, method, button or menu.
 ---
 
-# Odoo impact web explorer
+# Odoo impact web service and explorer
+
+## Dashboard (service)
+
+```bash
+odoo-impact service status       # running? (systemd --user unit `odoo-impact`)
+odoo-impact service install      # install + start, or: odoo-impact serve --open
+```
+
+Give the user **http://127.0.0.1:8770/**. Per worktree of each registered project:
+
+- **Generate / Regenerate**: builds that worktree's graph in the background (5-10 s for ~200 modules).
+- Graph state: *no graph*, *up to date*, *outdated* (new commits or uncommitted changes since the build).
+- **Open**: the explorer of that worktree (`/explore/<id>`).
+- **Changes**: what the worktree's commits + uncommitted edits touch vs `HEAD` or a branch, and the screens to retest.
+- **Ask**: if it changes / who changes it / from here, as text.
+
+A project missing from the list → **Add project** (repository + odoo.conf, or core folders), or
+`odoo-impact project add <repo> --conf <odoo.conf>`; see `odoo-impact-setup`.
+
+## Single graph file (no service)
 
 Needs a built graph (`<project>/.odoo-impact/graph.json`); otherwise run `odoo-impact-setup`.
-
-## Open it
 
 ```bash
 odoo-impact web                        # http://127.0.0.1:8765/ and opens the browser
@@ -27,7 +45,8 @@ do not bind `0.0.0.0`, the page lists the whole code structure.
 
 ## Deep link
 
-`#<mode>|<node id>` opens a question directly, mode = `impact`, `who` or `from`:
+`#<mode>|<node id>` opens a question directly in the explorer (service `/explore/<id>` or `odoo-impact web`),
+mode = `impact`, `who` or `from`:
 
 ```
 http://127.0.0.1:8765/#impact|sale.order.amount_total
