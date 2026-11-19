@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="cron_reset_discount" model="ir.cron">
+        <field name="name">Reset discounts</field>
+        <field name="model_id" ref="shop.model_shop_order"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_reset_discount()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+    </record>
+</odoo>

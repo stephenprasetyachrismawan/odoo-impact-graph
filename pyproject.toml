@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odoo-impact-graph"
+version = "0.1.0"
+description = "Layered impact graph for Odoo code bases (field -> logic -> view -> menu), with CLI, HTML explorer and an MCP server for AI agents"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+dependencies = []
+classifiers = ["Framework :: Odoo", "Programming Language :: Python :: 3"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+odoo-impact = "odoo_impact_graph.cli:main"
+
+[tool.setuptools]
+packages = ["odoo_impact_graph"]
+
+[tool.setuptools.package-data]
+odoo_impact_graph = ["explorer.html"]

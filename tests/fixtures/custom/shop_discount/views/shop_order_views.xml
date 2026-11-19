@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_discount" model="ir.ui.view">
+        <field name="name">shop.order.form.discount</field>
+        <field name="model">shop.order</field>
+        <field name="inherit_id" ref="shop.view_order_form"/>
+        <field name="arch" type="xml">
+            <field name="amount_total" position="after">
+                <field name="discount"/>
+                <field name="amount_net"/>
+            </field>
+            <xpath expr="//header" position="inside">
+                <button name="action_apply_discount" type="object" string="Apply 10%"/>
+                <button name="%(action_discount_wizard)d" type="action" string="Set Discount"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

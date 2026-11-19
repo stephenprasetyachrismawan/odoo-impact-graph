@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_discount_wizard_form" model="ir.ui.view">
+        <field name="name">shop.discount.wizard.form</field>
+        <field name="model">shop.discount.wizard</field>
+        <field name="arch" type="xml">
+            <form>
+                <field name="discount"/>
+                <footer><button name="action_apply" type="object" string="Apply"/></footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_discount_wizard" model="ir.actions.act_window">
+        <field name="name">Set Discount</field>
+        <field name="res_model">shop.discount.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

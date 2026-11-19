@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Odoo Impact Graph</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a66; --line: #d9d6cf;
+  --l0: #2f6f9f; --l1: #a2621b; --l2: #6b4fa0; --l3: #2e7d4f; --l4: #9c2f4a;
+  --hl: #e0a400; --chip: #faf9f6; --focus: #1d1d1b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #9b9a94; --line: #3a3936;
+    --l0: #6fb0e0; --l1: #e0a35a; --l2: #b39ae6; --l3: #6ccf95; --l4: #ec7f98;
+    --hl: #ffd24d; --chip: #262624; --focus: #ecebe6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #9b9a94; --line: #3a3936;
+  --l0: #6fb0e0; --l1: #e0a35a; --l2: #b39ae6; --l3: #6ccf95; --l4: #ec7f98;
+  --hl: #ffd24d; --chip: #262624; --focus: #ecebe6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 16px; margin: 0 8px 0 0; }
+.search { position: relative; flex: 1 1 320px; max-width: 560px; }
+.search input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+.search input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+#results { position: absolute; top: 100%; left: 0; right: 0; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; margin-top: 4px; display: none; z-index: 10; }
+#results div { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--line); }
+#results div:hover, #results div.active { background: var(--chip); }
+.mode { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.mode button { border: 0; background: transparent; color: var(--ink); padding: 7px 12px; font: inherit; cursor: pointer; }
+.mode button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+label.opt { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+select { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: inherit; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 0; min-height: calc(100vh - 60px); }
+#canvas { position: relative; padding: 16px; overflow: auto; }
+#svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.lane { position: relative; margin-bottom: 18px; padding: 10px 12px 12px; border-left: 4px solid var(--lc); background: var(--panel); border-radius: 0 6px 6px 0; }
+.lane h2 { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 8px; color: var(--lc); }
+.lane h2 span { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; z-index: 1; display: inline-flex; flex-direction: column; max-width: 300px; padding: 5px 8px; background: var(--chip); border: 1px solid var(--line); border-left: 3px solid var(--lc); border-radius: 4px; cursor: pointer; font-size: 12px; }
+.chip b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.root { outline: 2px solid var(--ink); }
+.chip.on { border-color: var(--hl); box-shadow: 0 0 0 2px var(--hl); }
+.chip.dim { opacity: .35; }
+.chip.core b::after { content: " core"; font-weight: 400; color: var(--muted); font-size: 10px; }
+.more { background: none; border: 1px dashed var(--line); color: var(--muted); border-radius: 4px; padding: 5px 8px; cursor: pointer; font: inherit; font-size: 12px; }
+path.e { fill: none; stroke: var(--line); stroke-width: 1; }
+path.e.on { stroke: var(--hl); stroke-width: 2; }
+aside { border-left: 1px solid var(--line); background: var(--panel); padding: 16px; overflow: auto; max-height: calc(100vh - 60px); position: sticky; top: 60px; }
+aside h3 { margin: 0 0 4px; font-size: 15px; word-break: break-all; }
+aside .kv { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+aside code { font-size: 12px; word-break: break-all; }
+aside ul { padding-left: 16px; margin: 4px 0 12px; }
+aside li { margin: 2px 0; font-size: 12px; }
+aside a { color: var(--l0); cursor: pointer; text-decoration: underline; }
+.empty { color: var(--muted); padding: 40px 16px; max-width: 640px; }
+.heur { color: var(--l1); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.actions button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 5px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Odoo Impact</h1>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search field, method, view, button, menu…  e.g. sale.order.amount_total, Confirm" autocomplete="off" aria-label="Search">
+    <div id="results" role="listbox"></div>
+  </div>
+  <div class="mode" role="group" aria-label="Direction">
+    <button data-mode="impact" aria-pressed="true" title="If this changes, what follows and where the user sees it">If it changes →</button>
+    <button data-mode="who" aria-pressed="false" title="What can change this (buttons, menus, crons, hooks)">← Who changes it</button>
+    <button data-mode="from" aria-pressed="false" title="What this menu / button / method can change">From here ↓</button>
+  </div>
+  <label class="opt">Depth <select id="depth"><option>2</option><option>3</option><option selected>4</option><option>6</option><option>8</option></select></label>
+  <label class="opt"><input type="checkbox" id="core"> core logic</label>
+</header>
+<main>
+  <div id="canvas">
+    <svg id="svg"></svg>
+    <div id="lanes"><div class="empty">
+      <p><b>Pick something in the search box.</b></p>
+      <p><b>If it changes →</b>: field changes → which fields recompute, which constraints / onchanges / write-create hooks run, and which views, actions and menus show the result.</p>
+      <p><b>← Who changes it</b>: which methods, buttons, menus and crons can write this field.</p>
+      <p><b>From here ↓</b>: start at a menu, action, button or method and see every field it can change.</p>
+      <p>Lanes go from L4 (what the user clicks) down to L0 (fields). Hover a card to light its path to the start. Edges marked <span class="heur">~</span> were read from Python method bodies (heuristic); the others come from declarations (fields, @api.*, views, actions, menus) or from the database registry.</p>
+    </div></div>
+  </div>
+  <aside id="detail"><p class="empty" style="padding:0">Click a card for details.</p></aside>
+</main>
+<script>
+const GRAPH = /*__GRAPH__*/null;
+const LEVELS = [
+  [4, 'L4 · Menu / Action / Cron', 'var(--l4)'],
+  [3, 'L3 · View / Button / Report', 'var(--l3)'],
+  [2, 'L2 · Model / Wizard', 'var(--l2)'],
+  [1, 'L1 · Logic (compute, constraint, onchange, hook, method)', 'var(--l1)'],
+  [0, 'L0 · Field', 'var(--l0)'],
+];
+const CHANGE = new Set(['compute','related','constrains','onchange','write_hook','create_hook','copy_hook','unlink_hook','triggers','writes','calls','computes','runs']);
+const WHO = new Set(['compute','related','writes','computes','calls','runs','has_button','opens','triggers']);
+const ENTRY = new Set(['opens','uses_view','has_button','calls','runs','model', ...CHANGE]);
+const LANE_LIMIT = 120;
+
+const nodes = new Map(GRAPH.nodes.map(n => [n.id, n]));
+const outE = new Map(), inE = new Map();
+for (const e of GRAPH.edges) {
+  (outE.get(e.s) || outE.set(e.s, []).get(e.s)).push(e);
+  (inE.get(e.t) || inE.set(e.t, []).get(e.t)).push(e);
+}
+const state = { root: null, mode: 'impact', depth: 4, core: false, expanded: new Set() };
+
+const $ = s => document.querySelector(s);
+const short = p => { const parts = String(p).split('/'); return parts.length > 4 ? '…/' + parts.slice(-4).join('/') : p; };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function title(n) {
+  if (n.type === 'field') return n.name;
+  if (n.lvl === 1) return n.name + '()';
+  return n.label || n.name || n.model || n.id;
+}
+function sub(n) {
+  if (n.type === 'field') return `${n.model} · ${n.ftype}${n.stored ? '' : ' · not stored'}`;
+  if (n.lvl === 1) return `${n.model} · ${n.type}`;
+  if (n.type === 'view') return `${n.vtype} · ${n.xmlid || n.model}`;
+  if (n.type === 'button') return `button · ${n.model}`;
+  if (n.type === 'menu') return 'menu';
+  return `${n.type}${n.model ? ' · ' + n.model : ''}`;
+}
+const keep = n => state.core || n.lvl !== 1 || n.custom || ['compute','onchange','constraint'].includes(n.type);
+
+function bfs(starts, adj, kinds, depth, reverse) {
+  const seen = new Map(starts.map(s => [s, {d: 0, e: null}]));
+  const queue = [...starts];
+  while (queue.length) {
+    const cur = queue.shift();
+    const d = seen.get(cur).d;
+    if (d >= depth) continue;
+    for (const e of adj.get(cur) || []) {
+      const nxt = reverse ? e.s : e.t;
+      if (!kinds.has(e.k) || seen.has(nxt) || !nodes.has(nxt) || !keep(nodes.get(nxt))) continue;
+      seen.set(nxt, {d: d + 1, e});
+      queue.push(nxt);
+    }
+  }
+  return seen;
+}
+
+// views showing reached fields -> actions using them -> menus opening them
+function addExposure(reached) {
+  const fields = [...reached.keys()].filter(id => nodes.get(id).type === 'field');
+  const add = (id, e) => { if (!reached.has(id)) reached.set(id, {d: 99, e, ui: true}); };
+  const views = [];
+  for (const f of fields) for (const e of inE.get(f) || []) if (e.k === 'shows') { if (!reached.has(e.s)) views.push(e.s); add(e.s, {...e, s: e.t, t: e.s, k: 'shown in'}); }
+  const actions = [];
+  for (const v of views) for (const e of inE.get(v) || []) if (e.k === 'uses_view') { if (!reached.has(e.s)) actions.push(e.s); add(e.s, {...e, s: e.t, t: e.s, k: 'opened by'}); }
+  for (const a of actions) for (const e of inE.get(a) || []) if (e.k === 'opens' && nodes.get(e.s).type === 'menu') add(e.s, {...e, s: e.t, t: e.s, k: 'menu'});
+}
+// buttons reached in "who" mode -> their view -> action -> menu
+function addEntryPath(reached) {
+  const add = (id, e) => { if (!reached.has(id)) reached.set(id, {d: 99, e, ui: true}); };
+  for (const id of [...reached.keys()]) {
+    const n = nodes.get(id);
+    if (n.type !== 'button' || !nodes.has(n.view)) continue;
+    add(n.view, {s: id, t: n.view, k: 'in view', src: 'registry'});
+    for (const e of inE.get(n.view) || []) if (e.k === 'uses_view') {
+      add(e.s, {s: n.view, t: e.s, k: 'opened by', src: 'registry'});
+      for (const m of inE.get(e.s) || []) if (m.k === 'opens' && nodes.get(m.s).type === 'menu') add(m.s, {s: e.s, t: m.s, k: 'menu', src: 'registry'});
+    }
+  }
+}
+
+function compute() {
+  const r = state.root;
+  let reached;
+  if (state.mode === 'impact') { reached = bfs([r], outE, CHANGE, state.depth, false); addExposure(reached); }
+  else if (state.mode === 'who') { reached = bfs([r], inE, WHO, state.depth, true); addEntryPath(reached); }
+  else { reached = bfs([r], outE, ENTRY, state.depth + 3, false); }
+  return reached;
+}
+// parent of a reached node (towards the root)
+function parentOf(id, info) {
+  if (!info.e) return null;
+  const e = info.e;
+  if (info.ui) return e.s;
+  return state.mode === 'who' ? e.t : e.s;
+}
+
+function render() {
+  if (!state.root) return;
+  const reached = compute();
+  const byLvl = new Map(LEVELS.map(l => [l[0], []]));
+  for (const id of reached.keys()) byLvl.get(nodes.get(id).lvl).push(id);
+  let html = '';
+  for (const [lvl, name, color] of LEVELS) {
+    let ids = byLvl.get(lvl);
+    if (!ids.length) continue;
+    ids.sort((a, b) => (a === state.root ? -1 : b === state.root ? 1 : (reached.get(a).d - reached.get(b).d) || title(nodes.get(a)).localeCompare(title(nodes.get(b)))));
+    const total = ids.length;
+    if (!state.expanded.has(lvl)) ids = ids.slice(0, LANE_LIMIT);
+    html += `<section class="lane" style="--lc:${color}"><h2>${name} <span>${total}</span></h2><div class="chips">`;
+    for (const id of ids) {
+      const n = nodes.get(id);
+      const cls = ['chip', id === state.root ? 'root' : '', n.lvl === 1 && !n.custom ? 'core' : ''].join(' ');
+      html += `<div class="${cls}" style="--lc:${color}" data-id="${esc(id)}" tabindex="0" title="${esc(id)}"><b>${esc(title(n))}</b><small>${esc(sub(n))}</small></div>`;
+    }
+    if (total > ids.length) html += `<button class="more" data-lvl="${lvl}">+ ${total - ids.length} more</button>`;
+    html += '</div></section>';
+  }
+  $('#lanes').innerHTML = html;
+  state.reached = reached;
+  requestAnimationFrame(drawEdges);
+}
+
+function drawEdges() {
+  const svg = $('#svg'), canvas = $('#canvas');
+  const box = canvas.getBoundingClientRect();
+  svg.setAttribute('width', canvas.scrollWidth); svg.setAttribute('height', canvas.scrollHeight);
+  const pos = new Map();
+  for (const el of document.querySelectorAll('.chip')) {
+    const r = el.getBoundingClientRect();
+    pos.set(el.dataset.id, {x: r.left - box.left + canvas.scrollLeft + r.width / 2, top: r.top - box.top + canvas.scrollTop, bottom: r.bottom - box.top + canvas.scrollTop});
+  }
+  let out = '';
+  for (const [id, info] of state.reached) {
+    const p = parentOf(id, info);
+    if (!p || !pos.has(id) || !pos.has(p)) continue;
+    const a = pos.get(p), b = pos.get(id);
+    const down = b.top > a.top;
+    const y1 = down ? a.bottom : a.top, y2 = down ? b.top : b.bottom;
+    const my = (y1 + y2) / 2;
+    out += `<path class="e" data-c="${esc(id)}" data-p="${esc(p)}" d="M${a.x},${y1} C${a.x},${my} ${b.x},${my} ${b.x},${y2}"/>`;
+  }
+  svg.innerHTML = out;
+}
+
+function pathToRoot(id) {
+  const ids = [id];
+  let cur = id, guard = 0;
+  while (cur && cur !== state.root && guard++ < 50) {
+    const info = state.reached.get(cur);
+    cur = info && parentOf(cur, info);
+    if (cur) ids.push(cur);
+  }
+  return ids;
+}
+function highlight(id) {
+  const path = id ? new Set(pathToRoot(id)) : null;
+  for (const el of document.querySelectorAll('.chip')) {
+    el.classList.toggle('on', !!path && path.has(el.dataset.id));
+    el.classList.toggle('dim', !!path && !path.has(el.dataset.id));
+  }
+  for (const p of document.querySelectorAll('path.e')) p.classList.toggle('on', !!path && path.has(p.dataset.c) && path.has(p.dataset.p));
+}
+
+function edgeText(e) {
+  let t = e.k;
+  if (e.via) t += ` via ${e.via}`;
+  if (e.fn) t += ` (${e.fn})`;
+  if (e.src === 'ast') t = `<span class="heur">~${esc(t)}</span>${e.at ? ` <code title="${esc(e.at)}">${esc(short(e.at))}</code>` : ''}`;
+  else t = esc(t);
+  return t;
+}
+function link(id) { const n = nodes.get(id); return n ? `<a data-go="${esc(id)}">${esc(title(n))}</a> <small>${esc(sub(n))}</small>` : esc(id); }
+
+function showDetail(id) {
+  const n = nodes.get(id);
+  const rows = [];
+  for (const [k, v] of Object.entries(n)) {
+    if (['id','lvl','type','name','label'].includes(k) || v === '' || v === null || (Array.isArray(v) && !v.length)) continue;
+    const shown = k === 'files' ? v.map(short) : v;
+    rows.push(`<div><b>${esc(k)}</b>: <code title="${esc(Array.isArray(v) ? v.join('\n') : v)}">${esc(Array.isArray(shown) ? shown.join(', ') : shown)}</code></div>`);
+  }
+  const chain = state.reached && state.reached.has(id) ? pathToRoot(id).reverse() : [];
+  const outs = (outE.get(id) || []).slice(0, 60), ins = (inE.get(id) || []).slice(0, 60);
+  $('#detail').innerHTML = `
+    <h3>${esc(title(n))}</h3>
+    <div class="kv">${esc(n.type)} · L${n.lvl} · <code>${esc(id)}</code></div>
+    <div class="actions">
+      <button data-root="${esc(id)}" data-m="impact">If it changes →</button>
+      <button data-root="${esc(id)}" data-m="who">← Who changes it</button>
+      <button data-root="${esc(id)}" data-m="from">From here ↓</button>
+    </div>
+    ${rows.join('')}
+    ${chain.length > 1 ? `<h4>Path from start</h4><ul>${chain.map((c, i) => `<li>${i ? edgeText(state.reached.get(c).e) + ' → ' : ''}${link(c)}</li>`).join('')}</ul>` : ''}
+    <h4>Outgoing (${(outE.get(id) || []).length})</h4><ul>${outs.map(e => `<li>${edgeText(e)} → ${link(e.t)}</li>`).join('')}</ul>
+    <h4>Incoming (${(inE.get(id) || []).length})</h4><ul>${ins.map(e => `<li>${link(e.s)} → ${edgeText(e)}</li>`).join('')}</ul>`;
+}
+
+function setRoot(id, mode) {
+  state.root = id;
+  if (mode) state.mode = mode;
+  state.expanded.clear();
+  for (const b of document.querySelectorAll('.mode button')) b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode));
+  const n = nodes.get(id);
+  $('#q').value = n.type === 'field' || n.lvl === 1 ? id.replace('::', '.') : title(n);
+  try { history.replaceState(null, '', '#' + encodeURIComponent(state.mode + '|' + id)); } catch (e) {}
+  render();
+  showDetail(id);
+}
+
+// search
+const index = GRAPH.nodes.map(n => [n, (n.id + ' ' + (n.label || '') + ' ' + (n.xmlid || '')).toLowerCase()]);
+let active = 0;
+function search() {
+  const words = $('#q').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const box = $('#results');
+  if (!words.length) { box.style.display = 'none'; return; }
+  const hits = index.filter(([n, s]) => words.every(w => s.includes(w)))
+    .sort((a, b) => (b[0].custom - a[0].custom) || (a[1].length - b[1].length)).slice(0, 50);
+  active = 0;
+  box.innerHTML = hits.map(([n], i) => `<div role="option" data-id="${esc(n.id)}" class="${i ? '' : 'active'}"><b>${esc(title(n))}</b> <small>${esc(sub(n))}</small></div>`).join('') || '<div>No match</div>';
+  box.style.display = 'block';
+}
+$('#q').addEventListener('input', search);
+$('#q').addEventListener('focus', search);
+$('#q').addEventListener('keydown', ev => {
+  const items = [...document.querySelectorAll('#results div[data-id]')];
+  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    active = Math.max(0, Math.min(items.length - 1, active + (ev.key === 'ArrowDown' ? 1 : -1)));
+    items.forEach((el, i) => el.classList.toggle('active', i === active));
+    items[active]?.scrollIntoView({block: 'nearest'});
+  } else if (ev.key === 'Enter' && items[active]) { pick(items[active].dataset.id); }
+  else if (ev.key === 'Escape') { $('#results').style.display = 'none'; }
+});
+function pick(id) {
+  $('#results').style.display = 'none';
+  const n = nodes.get(id);
+  setRoot(id, n.lvl >= 3 ? 'from' : state.mode);
+}
+$('#results').addEventListener('click', ev => { const el = ev.target.closest('[data-id]'); if (el) pick(el.dataset.id); });
+document.addEventListener('click', ev => { if (!ev.target.closest('.search')) $('#results').style.display = 'none'; });
+
+document.querySelectorAll('.mode button').forEach(b => b.addEventListener('click', () => { if (state.root) setRoot(state.root, b.dataset.mode); else { state.mode = b.dataset.mode; document.querySelectorAll('.mode button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); } }));
+$('#depth').addEventListener('change', ev => { state.depth = +ev.target.value; render(); });
+$('#core').addEventListener('change', ev => { state.core = ev.target.checked; render(); });
+
+$('#lanes').addEventListener('mouseover', ev => { const c = ev.target.closest('.chip'); highlight(c && c.dataset.id); });
+$('#lanes').addEventListener('mouseleave', () => highlight(null));
+$('#lanes').addEventListener('click', ev => {
+  const more = ev.target.closest('.more');
+  if (more) { state.expanded.add(+more.dataset.lvl); render(); return; }
+  const c = ev.target.closest('.chip');
+  if (c) showDetail(c.dataset.id);
+});
+$('#lanes').addEventListener('dblclick', ev => { const c = ev.target.closest('.chip'); if (c) setRoot(c.dataset.id); });
+$('#lanes').addEventListener('keydown', ev => { const c = ev.target.closest('.chip'); if (c && ev.key === 'Enter') showDetail(c.dataset.id); });
+$('#detail').addEventListener('click', ev => {
+  const go = ev.target.closest('[data-go]');
+  if (go) { showDetail(go.dataset.go); return; }
+  const b = ev.target.closest('[data-root]');
+  if (b) setRoot(b.dataset.root, b.dataset.m);
+});
+window.addEventListener('resize', () => state.root && requestAnimationFrame(drawEdges));
+
+try {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h.includes('|')) { const [m, id] = h.split('|'); if (nodes.has(id)) setRoot(id, m); }
+} catch (e) {}
+const META = GRAPH.meta || {};
+document.title = `Odoo Impact · ${META.db || META.source || ''}`;
+</script>
+</body>
+</html>
